@@ -22,29 +22,46 @@ if not os.path.exists(ngrok_path):
 
 PUBLIC_URL = f"https://{NGROK_DOMAIN}"  # noqa: F821  (defined in the notebook)
 ngrok_proc = None
-for flag in ("--url", "--domain"):
-    ngrok_proc = subprocess.Popen(
-        [ngrok_path, "http", "7860", f"{flag}={NGROK_DOMAIN}",  # noqa: F821
-         "--authtoken", NGROK_AUTHTOKEN, "--log", "stdout"],  # noqa: F821
-        stdout=open("/tmp/ngrok.log", "w"), stderr=subprocess.STDOUT)
-    for _ in range(25):
-        time.sleep(1)
-        if ngrok_proc.poll() is not None:
-            break
-        try:
-            r = requests.get(f"{PUBLIC_URL}/health", timeout=5,
-                             headers={"ngrok-skip-browser-warning": "1"})
-            if r.ok and r.json().get("service") == "hindidub":
+# ERR_NGROK_334 = the domain is still held by another session (an older run
+# that is shutting down, or a second session). Wait for it to go away.
+for attempt in range(12):
+    if attempt:
+        print(f"ngrok domain still in use by another session - retrying ({attempt}/11) ...",
+              flush=True)
+        time.sleep(15)
+    for flag in ("--url", "--domain"):
+        ngrok_proc = subprocess.Popen(
+            [ngrok_path, "http", "7860", f"{flag}={NGROK_DOMAIN}",  # noqa: F821
+             "--authtoken", NGROK_AUTHTOKEN, "--log", "stdout"],  # noqa: F821
+            stdout=open("/tmp/ngrok.log", "w"), stderr=subprocess.STDOUT)
+        for _ in range(25):
+            time.sleep(1)
+            if ngrok_proc.poll() is not None:
                 break
-        except Exception:
-            pass
-    else:
-        ngrok_proc.kill()
-        continue
+            try:
+                r = requests.get(f"{PUBLIC_URL}/health", timeout=5,
+                                 headers={"ngrok-skip-browser-warning": "1"})
+                if r.ok and r.json().get("service") == "hindidub":
+                    break
+            except Exception:
+                pass
+        else:
+            ngrok_proc.kill()
+            ngrok_proc.wait()  # so poll() reports it as stopped
+            continue
+        if ngrok_proc.poll() is None:
+            break
     if ngrok_proc.poll() is None:
-        break
-else:
-    print(open("/tmp/ngrok.log").read()[-3000:])
+        break  # tunnel is up
+    if "ERR_NGROK_334" not in open("/tmp/ngrok.log").read():
+        break  # a different error: don't keep retrying
+if ngrok_proc.poll() is not None:
+    log_text = open("/tmp/ngrok.log").read()
+    print(log_text[-3000:])
+    if "ERR_NGROK_334" in log_text:
+        raise RuntimeError(
+            "Your ngrok domain is used by ANOTHER running session. In Kaggle open "
+            "'View Active Events' (bottom-left), stop every other HindiDub session, then run again.")
     raise RuntimeError("ngrok tunnel failed - see log above")
 
 print("✅ HindiDub server is LIVE at", PUBLIC_URL)
