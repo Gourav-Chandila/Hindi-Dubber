@@ -148,6 +148,17 @@ class JobStore:
                 self.db.commit()
 
 
+def describe_error(exc: BaseException) -> str:
+    """Never empty: type, message and the line where it happened
+    (e.g. a bare AssertionError has no message at all)."""
+    msg = f"{type(exc).__name__}: {exc}".strip().rstrip(":")
+    frames = traceback.extract_tb(exc.__traceback__)
+    if frames:
+        f = frames[-1]
+        msg += f" (at {Path(f.filename).name}:{f.lineno} in {f.name})"
+    return msg[:500]
+
+
 def _ext(name: str) -> str:
     suffix = Path(name or "").suffix.lower()
     return suffix if suffix in {".mp4", ".mkv", ".mov", ".webm", ".avi", ".m4v", ".3gp"} else ".mp4"
@@ -217,8 +228,10 @@ class Worker:
             except Cancelled:
                 self.store.update(jid, status="cancelled", stage="cancelled")
             except Exception as exc:  # noqa: BLE001
-                log.error("job %s failed: %s", jid, traceback.format_exc())
-                self.store.update(jid, status="failed", error=str(exc)[:500])
+                tb = traceback.format_exc()
+                log.error("job %s failed: %s", jid, tb)
+                (self.store.job_dir(jid) / "error.txt").write_text(tb)
+                self.store.update(jid, status="failed", error=describe_error(exc))
             finally:
                 self.cancelled.discard(jid)
                 self.current = None

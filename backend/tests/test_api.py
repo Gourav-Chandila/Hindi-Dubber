@@ -41,3 +41,13 @@ def test_resumable_upload_flow(client):
 def test_rejects_oversize(client):
     r = client.post("/uploads", json={"filename": "a.mp4", "size": 10**13})
     assert r.status_code == 413
+
+
+def test_describe_error_is_never_empty():
+    from app.jobs import describe_error
+
+    try:
+        assert False  # noqa: B011 - bare AssertionError has an empty message
+    except AssertionError as exc:
+        msg = describe_error(exc)
+    assert msg.startswith("AssertionError") and "test_api.py" in msg

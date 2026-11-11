@@ -145,6 +145,15 @@ def job_subtitles(jid: str) -> FileResponse:
     return FileResponse(path, media_type="application/x-subrip", filename=f"hindi_{jid}.srt")
 
 
+@app.get("/jobs/{jid}/error", dependencies=[Depends(auth)])
+def job_error(jid: str) -> dict:
+    """Full traceback of a failed job, for debugging."""
+    path = store.job_dir(jid) / "error.txt"
+    if not path.exists():
+        raise HTTPException(404, "No error recorded")
+    return {"job_id": jid, "traceback": path.read_text()[-8000:]}
+
+
 @app.delete("/jobs/{jid}", dependencies=[Depends(auth)])
 def delete_job(jid: str) -> dict:
     job = store.get(jid)
