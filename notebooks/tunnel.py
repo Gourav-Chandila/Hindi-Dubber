@@ -48,3 +48,6 @@ else:
     raise RuntimeError("ngrok tunnel failed - see log above")
 
 print("✅ HindiDub server is LIVE at", PUBLIC_URL)
+
+# Apply future GitHub fixes to this running server automatically.
+exec(open("/tmp/hindidub-src/notebooks/autoupdate.py").read())
