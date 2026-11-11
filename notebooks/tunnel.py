@@ -21,6 +21,20 @@ if not os.path.exists(ngrok_path):
     installer.install_ngrok(ngrok_path)
 
 PUBLIC_URL = f"https://{NGROK_DOMAIN}"  # noqa: F821  (defined in the notebook)
+
+# If another session already serves HindiDub at this URL, don't start a
+# duplicate (it would only burn GPU hours and fight over the domain).
+try:
+    _r = requests.get(f"{PUBLIC_URL}/health", timeout=10,
+                      headers={"ngrok-skip-browser-warning": "1"})
+    if _r.ok and _r.json().get("service") == "hindidub":
+        server.terminate()  # noqa: F821
+        raise SystemExit(
+            f"Another session is ALREADY serving HindiDub at {PUBLIC_URL} - use the app now. "
+            "This duplicate run stops here to save your GPU hours.")
+except (requests.RequestException, ValueError):
+    pass  # nobody is serving yet: start our tunnel below
+
 ngrok_proc = None
 # ERR_NGROK_334 = the domain is still held by another session (an older run
 # that is shutting down, or a second session). Wait for it to go away.
