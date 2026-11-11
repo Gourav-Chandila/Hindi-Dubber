@@ -39,7 +39,10 @@ with tempfile.TemporaryDirectory() as d:
     import soundfile as sf
 
     wav = Path(d) / "s.wav"
-    sf.write(wav, np.zeros((44100, 2), dtype="float32"), 44100)
+    # Demucs normalises by the signal's std, so pure silence would divide by zero.
+    t = np.linspace(0, 3, 3 * 44100, dtype="float32")
+    tone = 0.1 * np.sin(2 * np.pi * 220 * t)
+    sf.write(wav, np.stack([tone, tone], axis=1), 44100)
     subprocess.run([sys.executable, "-m", "demucs", "--two-stems", "vocals", "-n", "htdemucs",
                     "-d", "cpu", "-o", d, str(wav)], check=True)
 print("all models ready", flush=True)

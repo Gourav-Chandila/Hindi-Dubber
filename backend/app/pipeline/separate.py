@@ -10,6 +10,14 @@ import numpy as np
 
 from . import audio
 
+MIN_SECONDS = 1.0
+
+
+def needs_model(chunk: np.ndarray, sr: int) -> bool:
+    """Demucs crashes on (near-)silent input (std = 0) and on very short clips.
+    Such chunks have no speech to separate anyway."""
+    return len(chunk) >= MIN_SECONDS * sr and float(np.std(chunk)) > 1e-5
+
 
 def separate(mix_wav: Path, work: Path, chunk_seconds: int, device: str,
              progress=lambda f: None) -> tuple[Path, Path]:
@@ -26,8 +34,14 @@ def separate(mix_wav: Path, work: Path, chunk_seconds: int, device: str,
     vocals_parts, bg_parts = [], []
     starts = list(range(0, n, step)) or [0]
     for idx, a in enumerate(starts):
+        chunk = data[a:a + step]
+        if not needs_model(chunk, sr):
+            vocals_parts.append(np.zeros_like(chunk))
+            bg_parts.append(chunk)
+            progress((idx + 1) / len(starts))
+            continue
         part = chunk_dir / f"chunk_{idx:04d}.wav"
-        audio.save(part, data[a:a + step], sr)
+        audio.save(part, chunk, sr)
         out_dir = chunk_dir / f"out_{idx:04d}"
         stem_dir = out_dir / "htdemucs" / part.stem
         if not (stem_dir / "vocals.wav").exists():
