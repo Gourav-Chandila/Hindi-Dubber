@@ -13,6 +13,7 @@ import numpy as np
 
 from ..config import Settings
 from . import audio, media, timing
+from .hindi_numbers import numbers_to_hindi as speakable
 from .mix import mix
 
 log = logging.getLogger("hindidub.pipeline")
@@ -162,7 +163,7 @@ def _synthesize(segments, refs, work: Path, cfg: Settings, device: str, translat
     seg_dir = work / "tts"
     seg_dir.mkdir(exist_ok=True)
     track = np.zeros(int(total * MIX_SR) + MIX_SR, dtype=np.float32)
-    shortened = trimmed = 0
+    shortened = trimmed = failed = 0
     from .mix import place
 
     for i, s in enumerate(segments):
@@ -172,7 +173,14 @@ def _synthesize(segments, refs, work: Path, cfg: Settings, device: str, translat
             clip = clip[:, 0]
         else:
             slot = timing.slot_for(segments, i, total)
-            clip = _render_line(tts, s, slot, cfg, translator)
+            try:
+                clip = _render_line(tts, s, slot, cfg, translator)
+            except Exception:  # noqa: BLE001 - one bad line must not sink a long video
+                failed += 1
+                log.exception("line %d failed, leaving it silent: %r", i, s.get("hi"))
+                if failed > max(3, len(segments) // 5):
+                    raise
+                continue
             if clip is None:
                 continue
             audio.save(cached, clip, MIX_SR)
@@ -184,6 +192,7 @@ def _synthesize(segments, refs, work: Path, cfg: Settings, device: str, translat
         p((i + 1) / len(segments))
     stats["lines_shortened"] = shortened
     stats["lines_trimmed"] = trimmed
+    stats["lines_failed"] = failed
     del tts
     return track
 
@@ -192,12 +201,12 @@ def _render_line(tts, s: dict, slot: float, cfg: Settings, translator) -> np.nda
     text = (s.get("hi") or "").strip()
     if not text or slot <= 0.1:
         return None
-    wav = audio.resample(tts.synth(s["speaker"], text), tts.sample_rate, MIX_SR)
+    wav = audio.resample(tts.synth(s["speaker"], speakable(text)), tts.sample_rate, MIX_SR)
     plan = timing.plan_fit(len(wav) / MIX_SR, slot, cfg.max_stretch)
     if plan.needs_shorter:
         short = translator([s["text"]], shorter=True)[0]
         if short and short != text:
-            wav2 = audio.resample(tts.synth(s["speaker"], short), tts.sample_rate, MIX_SR)
+            wav2 = audio.resample(tts.synth(s["speaker"], speakable(short)), tts.sample_rate, MIX_SR)
             if len(wav2) < len(wav):
                 wav, s["hi"], s["shortened"] = wav2, short, True
                 plan = timing.plan_fit(len(wav) / MIX_SR, slot, cfg.max_stretch)
