@@ -5,6 +5,7 @@ import logging
 import shutil
 import time
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse
@@ -17,6 +18,21 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 
 store = JobStore(settings)
 worker = Worker(store)
+
+
+def _code_version() -> str:
+    """Short git commit of the running code (shows on /health)."""
+    import subprocess
+
+    try:
+        return subprocess.run(["git", "rev-parse", "--short=7", "HEAD"], capture_output=True,
+                              text=True, timeout=5, cwd=Path(__file__).parent).stdout.strip() or "unknown"
+    except Exception:  # noqa: BLE001
+        return "unknown"
+
+
+VERSION = _code_version()
+STARTED = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime())
 
 
 @asynccontextmanager
@@ -53,7 +69,8 @@ class NewUpload(BaseModel):
 @app.get("/")
 @app.get("/health")
 def health() -> dict:
-    return {"ok": True, "service": "hindidub", "device": settings.resolved_device(),
+    return {"ok": True, "service": "hindidub", "version": VERSION, "started": STARTED,
+            "device": settings.resolved_device(),
             "busy": worker.current is not None, "queued": worker.q.qsize(),
             "idle_seconds": int(time.time() - _last_activity)}
 
