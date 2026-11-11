@@ -26,7 +26,8 @@ jobs:
     # Fully automatic free hosting on Hugging Face Spaces.
     # Needs: secret HF_TOKEN (write token) and variable HF_SPACE (e.g. "yourname/hindidub").
     needs: test
-    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    # Hugging Face now needs PRO for Docker Spaces, so this is opt-in (variable HF_DEPLOY=true).
+    if: vars.HF_DEPLOY == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

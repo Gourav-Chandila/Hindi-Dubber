@@ -8,13 +8,13 @@ Android app + free self-hosted backend that turns **any English video into a Hin
   track is added, and the original English track is kept as a second track.
 - 🎵 Background music and sound effects are kept. Only the speech is replaced.
 - ⏱️ Any length: audio is processed in chunks, and the upload is resumable.
-- 💸 100% free and open-source models. No paid API keys.
+- 💸 100% free: open-source models on Kaggle's free GPU. No paid API keys.
 - 🤖 No manual steps for the user: pick video → **Dub to Hindi** → the Hindi video is saved to `Movies/HindiDub`.
 
 ## How it works
 
 ```
-Android app ──(resumable chunked upload)──► Backend (FastAPI, Docker, free HF Space)
+Android app ──(resumable chunked upload)──► Backend (FastAPI on a free Kaggle GPU, via ngrok)
                                               1. ffmpeg      extract audio
                                               2. Demucs      split voices / music
                                               3. Whisper     English speech → text + timestamps
@@ -42,38 +42,47 @@ temperature.
 
 > ⚠️ NLLB and XTTS-v2 are free **for non-commercial use only**.
 
-## One-time setup (≈10 minutes, then fully automatic)
+## One-time setup (≈15 minutes)
 
-### 1. Free backend on Hugging Face Spaces
-1. Create a free account at <https://huggingface.co> and a **write** token at
-   <https://huggingface.co/settings/tokens>.
-2. In this GitHub repo, go to **Settings → Secrets and variables → Actions**:
-   - **Secret** `HF_TOKEN` = your token
-   - **Variable** `HF_SPACE` = `your-hf-username/hindidub`
-3. Go to **Actions → Backend → Run workflow**. This creates the Space and deploys the backend.
-   The first Docker build takes about 20–40 minutes because it downloads all the models.
-4. The API is now at `https://your-hf-username-hindidub.hf.space` (open `/health` to check it).
+The server runs **free on a Kaggle GPU** and is reached through a **free fixed ngrok URL**.
 
-### 2. Get the APK
-- **Actions → Android APK → Run workflow** (it also runs on every push to `android/`).
-- Download the `HindiDub-apk` artifact and install `HindiDub-x.y.z.apk` on your phone.
-- The server URL is **baked into the APK** from `HF_SPACE`, so users never type anything.
-- For a permanent download link, push a tag: `git tag v1.0.0 && git push origin v1.0.0`.
-  This creates a GitHub Release with the APK attached.
+### 1. ngrok (free fixed URL)
+1. Sign up at <https://dashboard.ngrok.com/signup>.
+2. Copy your **authtoken**: <https://dashboard.ngrok.com/get-started/your-authtoken>
+3. Claim your free **static domain**: <https://dashboard.ngrok.com/domains> (e.g. `abc-xyz.ngrok-free.app`).
 
-Optional release signing (needed for the Play Store): add the secrets `KEYSTORE_BASE64`
-(`base64 -w0 release.jks`), `KEYSTORE_PASSWORD`, `KEY_ALIAS` and `KEY_PASSWORD`.
-Without them, the release APK is signed with a debug key, which still installs fine.
+### 2. Kaggle (free GPU, 30 h/week)
+1. Sign up at <https://www.kaggle.com> and **verify your phone number** (needed for Internet + GPU).
+2. **Create → New Notebook → File → Import Notebook**, then import `notebooks/hindidub_kaggle.ipynb` from this repo.
+3. Settings: **Accelerator = GPU T4 x2**, **Internet = On**.
+4. **Add-ons → Secrets**: add and tick `NGROK_AUTHTOKEN`, `NGROK_DOMAIN`, and `HINDIDUB_API_KEY`
+   (any long random password).
+
+### 3. GitHub (bakes the URL + key into the APK)
+**Settings → Secrets and variables → Actions**:
+- Variable `NGROK_DOMAIN` = your ngrok domain
+- Secret `HINDIDUB_API_KEY` = the same password as in Kaggle
+
+Then **Actions → Android APK → Run workflow** and install the APK from the `HindiDub-apk` artifact.
+
+### Every time you dub
+1. In Kaggle: **Save Version → Save & Run All (Commit)**. It runs in the background and is ready in about 10 minutes.
+2. On your phone: open HindiDub → pick a video → **Dub to Hindi**.
+3. The notebook stops by itself after 45 minutes of no work, to save your GPU hours.
+
+<details><summary>Alternative: Hugging Face Space (needs HF PRO)</summary>
+
+Set the secret `HF_TOKEN` and the variables `HF_SPACE=user/hindidub` and `HF_DEPLOY=true`, then run **Actions → Backend**.
+</details>
 
 ## Speed and limits (be realistic)
 
 | Where the backend runs | 10-min video | 1-hour video |
 |---|---|---|
-| Free HF Space (2 vCPU) | ~1–2 h | ~6–10 h |
-| Free Colab / Kaggle T4 GPU, or your own PC with a GPU | ~8–15 min | ~1 h |
+| **Kaggle free T4 GPU (default)** | ~8–15 min | ~1 h |
+| CPU only (2 vCPU) | ~1–2 h | ~6–10 h |
 
-- A free Space sleeps after 48 h without use and wakes up on the first request (about 1 minute).
-  The app waits for it automatically.
+- A Kaggle session lasts at most 12 h, and the free quota is 30 GPU-hours a week.
 - One video is processed at a time, and the others queue.
 - No lip-sync: the picture is deliberately untouched, so mouths won't match the Hindi.
 - Up to 8 distinct speakers by default (`HD_MAX_SPEAKERS`).
@@ -111,7 +120,8 @@ Set `HD_API_KEY` on the server to require an `X-API-Key` header. The app has a f
 ```
 android/    Kotlin + Jetpack Compose app (WorkManager background upload/poll/download, ExoPlayer)
 backend/    FastAPI + pipeline (app/pipeline/*), Dockerfile, tests
-deploy/     Hugging Face Space deploy script
+notebooks/  Kaggle notebook that runs the server on a free GPU
+deploy/     optional Hugging Face Space deploy script
 .github/workflows/  android.yml (APK build + release), backend.yml (tests + HF deploy)
 ```
 

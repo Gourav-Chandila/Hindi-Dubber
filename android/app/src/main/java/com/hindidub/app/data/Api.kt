@@ -40,6 +40,7 @@ class Api(baseUrl: String, private val apiKey: String) {
 
     private fun req(path: String) = Request.Builder().url("$base$path").apply {
         if (apiKey.isNotEmpty()) header("X-API-Key", apiKey)
+        header("ngrok-skip-browser-warning", "1") // free ngrok domains show a warning page otherwise
     }
 
     private fun call(r: Request): JSONObject = http.newCall(r).execute().use { resp ->
@@ -54,7 +55,7 @@ class Api(baseUrl: String, private val apiKey: String) {
             401 -> "Server rejected the API key."
             404 -> detail ?: "Not found on server."
             413 -> detail ?: "Video is too large for this server."
-            502, 503, 504 -> "Server is starting up or busy. Retrying…"
+            502, 503, 504 -> "Server is offline. Start the Kaggle notebook, then retry."
             else -> detail ?: "Server error ${resp.code}"
         }
     }

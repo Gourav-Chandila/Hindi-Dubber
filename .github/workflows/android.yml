@@ -32,11 +32,14 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
 
       - name: Work out server URL
-        # Priority: HINDIDUB_SERVER_URL variable > URL derived from HF_SPACE variable.
+        # Priority: HINDIDUB_SERVER_URL > NGROK_DOMAIN (Kaggle) > HF_SPACE.
         run: |
           URL="${{ vars.HINDIDUB_SERVER_URL }}"
+          NGROK="${{ vars.NGROK_DOMAIN }}"
           SPACE="${{ vars.HF_SPACE }}"
-          if [ -z "$URL" ] && [ -n "$SPACE" ]; then
+          if [ -z "$URL" ] && [ -n "$NGROK" ]; then
+            URL="https://${NGROK#https://}"
+          elif [ -z "$URL" ] && [ -n "$SPACE" ]; then
             URL="https://$(echo "$SPACE" | tr '[:upper:]' '[:lower:]' | sed 's#/#-#; s#[_.]#-#g').hf.space"
           fi
           echo "Server URL baked into APK: ${URL:-<placeholder - set in app settings>}"
@@ -64,6 +67,7 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          HINDIDUB_API_KEY: ${{ secrets.HINDIDUB_API_KEY }}
         run: |
           chmod +x gradlew
           ./gradlew --no-daemon assembleDebug assembleRelease

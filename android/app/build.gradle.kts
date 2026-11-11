@@ -10,6 +10,8 @@ val serverUrl: String = (System.getenv("HINDIDUB_SERVER_URL")
     ?: (project.findProperty("hindidub.serverUrl") as String?)
     ?: "https://YOUR-HF-USERNAME-hindidub.hf.space").trimEnd('/')
 
+val apiKey: String = System.getenv("HINDIDUB_API_KEY") ?: ""
+
 val keystorePath: String? = System.getenv("KEYSTORE_PATH")
 
 android {
@@ -23,6 +25,7 @@ android {
         versionCode = (System.getenv("VERSION_CODE") ?: "1").toInt()
         versionName = System.getenv("VERSION_NAME") ?: "1.0.0"
         buildConfigField("String", "DEFAULT_SERVER_URL", "\"$serverUrl\"")
+        buildConfigField("String", "DEFAULT_API_KEY", "\"$apiKey\"")
     }
 
     signingConfigs {

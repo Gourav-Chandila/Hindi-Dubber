@@ -79,7 +79,7 @@ def diarize(vocals16k: Path, segments: list[dict], work: Path, device: str,
     wav = wav[:, 0]
     enc = EncoderClassifier.from_hparams(
         source="speechbrain/spkrec-ecapa-voxceleb",
-        savedir=str(work.parent.parent / "models" / "ecapa"),
+        savedir=str(work.parents[2] / "models" / "ecapa"),  # = HD_DATA_DIR/models, same as prefetch
         run_opts={"device": device},
     )
     embs = np.zeros((len(segments), 192), dtype=np.float32)

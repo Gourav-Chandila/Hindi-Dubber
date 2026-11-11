@@ -13,7 +13,7 @@ class Prefs(context: Context) {
         set(v) = sp.edit { putString("server_url", v.trim().trimEnd('/')) }
 
     var apiKey: String
-        get() = sp.getString("api_key", "") ?: ""
+        get() = sp.getString("api_key", null)?.takeIf { it.isNotBlank() } ?: BuildConfig.DEFAULT_API_KEY
         set(v) = sp.edit { putString("api_key", v.trim()) }
 
     var lastResultUri: String?

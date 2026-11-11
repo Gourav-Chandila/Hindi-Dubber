@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import shutil
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, UploadFile
@@ -27,6 +28,16 @@ async def lifespan(_app: FastAPI):
 app = FastAPI(title="HindiDub", version="1.0.0", lifespan=lifespan)
 
 CHUNK_LIMIT = 64 * 1024 * 1024
+_last_activity = time.time()
+
+
+@app.middleware("http")
+async def track_activity(request: Request, call_next):
+    # /health is polled by the Kaggle keep-alive loop, so it must not count as activity.
+    global _last_activity
+    if request.url.path not in ("/", "/health"):
+        _last_activity = time.time()
+    return await call_next(request)
 
 
 def auth(x_api_key: str = Header(default="")) -> None:
@@ -43,7 +54,8 @@ class NewUpload(BaseModel):
 @app.get("/health")
 def health() -> dict:
     return {"ok": True, "service": "hindidub", "device": settings.resolved_device(),
-            "busy": worker.current is not None, "queued": worker.q.qsize()}
+            "busy": worker.current is not None, "queued": worker.q.qsize(),
+            "idle_seconds": int(time.time() - _last_activity)}
 
 
 # ---- resumable chunked upload (used by the Android app) --------------------
