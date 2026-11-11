@@ -105,7 +105,9 @@ class DubWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, p
 
     private fun retryOrFail(e: Exception): Result =
         if (runAttemptCount < MAX_ATTEMPTS) {
-            setProgressAsyncSafe(STAGE_RETRY, 0f, "Connection problem – retrying automatically…")
+            val msg = if (e is ApiException && e.code == 503) "Server offline – waiting for it to start…"
+            else "Connection problem – retrying automatically…"
+            setProgressAsyncSafe(STAGE_RETRY, 0f, msg)
             Result.retry()
         } else fail("Could not reach the server: ${e.message}")
 

@@ -12,6 +12,8 @@ import java.util.concurrent.TimeUnit
 
 class ApiException(val code: Int, message: String) : IOException(message)
 
+const val OFFLINE = "Server is offline. In Kaggle run Save Version → Save & Run All, then wait ~5 min."
+
 data class JobStatus(
     val id: String,
     val status: String,      // uploading | queued | running | done | failed | cancelled
@@ -45,9 +47,17 @@ class Api(baseUrl: String, private val apiKey: String) {
 
     private fun call(r: Request): JSONObject = http.newCall(r).execute().use { resp ->
         val body = resp.body?.string().orEmpty()
+        if (!resp.isSuccessful && isTunnelOffline(resp, body)) {
+            // ngrok answers 404 ERR_NGROK_3200 when the Kaggle server is not running.
+            // Treat it as "temporarily unavailable" so the app keeps waiting.
+            throw ApiException(503, OFFLINE)
+        }
         if (!resp.isSuccessful) throw ApiException(resp.code, errorText(resp, body))
         if (body.isBlank()) JSONObject() else JSONObject(body)
     }
+
+    private fun isTunnelOffline(resp: Response, body: String): Boolean =
+        resp.header("ngrok-error-code") != null || body.contains("ERR_NGROK_")
 
     private fun errorText(resp: Response, body: String): String {
         val detail = runCatching { JSONObject(body).opt("detail")?.toString() }.getOrNull()
@@ -55,7 +65,7 @@ class Api(baseUrl: String, private val apiKey: String) {
             401 -> "Server rejected the API key."
             404 -> detail ?: "Not found on server."
             413 -> detail ?: "Video is too large for this server."
-            502, 503, 504 -> "Server is offline. Start the Kaggle notebook, then retry."
+            502, 503, 504 -> OFFLINE
             else -> detail ?: "Server error ${resp.code}"
         }
     }
