@@ -11,6 +11,7 @@ import os
 import numpy as np
 
 os.environ.setdefault("COQUI_TOS_AGREED", "1")  # non-commercial CPML licence
+os.environ["MPLBACKEND"] = "Agg"  # headless; Coqui imports matplotlib
 
 
 class Speaker:

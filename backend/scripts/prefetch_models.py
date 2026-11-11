@@ -6,6 +6,7 @@ import tempfile
 from pathlib import Path
 
 os.environ.setdefault("COQUI_TOS_AGREED", "1")
+os.environ["MPLBACKEND"] = "Agg"  # headless; Coqui imports matplotlib
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.config import settings
