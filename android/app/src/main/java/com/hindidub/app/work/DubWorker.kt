@@ -117,16 +117,18 @@ class DubWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, p
     private suspend fun upload(api: Api, uri: Uri, name: String, knownSize: Long): String {
         val cr = applicationContext.contentResolver
         val size = if (knownSize > 0) knownSize else cr.openAssetFileDescriptor(uri, "r")!!.use { it.length }
-        var uploadId = prefs.uploadId(workKey)
-        var offset = 0L
-        if (uploadId != null) {
-            offset = runCatching { api.uploadReceived(uploadId!!) }.getOrElse { uploadId = null; 0L }
+        val saved: String? = prefs.uploadId(workKey)
+        val resumeAt: Long? = saved?.let { sid -> runCatching { api.uploadReceived(sid) }.getOrNull() }
+        val id: String
+        var offset: Long
+        if (saved != null && resumeAt != null) {
+            id = saved
+            offset = resumeAt
+        } else {
+            id = api.createUpload(name, size)
+            prefs.setUploadId(workKey, id)
+            offset = 0L
         }
-        if (uploadId == null) {
-            uploadId = api.createUpload(name, size)
-            prefs.setUploadId(workKey, uploadId)
-        }
-        val id = uploadId!!
         val buf = ByteArray(CHUNK)
         cr.openInputStream(uri)!!.use { input ->
             var skipped = 0L
