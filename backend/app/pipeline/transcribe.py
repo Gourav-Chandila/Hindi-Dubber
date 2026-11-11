@@ -31,3 +31,19 @@ def transcribe(wav16k: Path, work: Path, model_name: str, device: str,
             progress(min(1.0, s.end / total_seconds))
     cache.write_text(json.dumps(segments, ensure_ascii=False, indent=1))
     return segments
+
+
+def english_scores(clips: list[Path], model_name: str, device: str) -> list[float]:
+    """Probability that each short clip is English speech (Whisper language ID)."""
+    from faster_whisper import WhisperModel
+
+    compute = "float16" if device == "cuda" else "int8"
+    model = WhisperModel(model_name, device=device, compute_type=compute)
+    scores = []
+    for clip in clips:
+        _segments, info = model.transcribe(str(clip), language=None, vad_filter=True)
+        probs = dict(getattr(info, "all_language_probs", None) or [])
+        if not probs and info.language:
+            probs = {info.language: info.language_probability}
+        scores.append(float(probs.get("en", 0.0)))
+    return scores

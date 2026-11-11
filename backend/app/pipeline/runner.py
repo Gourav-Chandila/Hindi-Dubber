@@ -61,12 +61,16 @@ def run_pipeline(video: Path, work: Path, out_path: Path, cfg: Settings,
         raise PipelineError("No video stream found in the uploaded file.")
     total = media.duration(video)
     stats["duration_s"] = round(total, 2)
+    src, how = choose_english_track(video, work, cfg, device, total)
+    stats["source_track"] = {"index": src, "chosen_by": how,
+                             "tracks": len(media.audio_streams(video))}
+    log.info("using audio track %d (%s)", src, how)
     orig = work / "orig.wav"
     if not orig.exists():
-        media.extract_audio(video, orig, MIX_SR, 2)
+        media.extract_audio(video, orig, MIX_SR, 2, stream=src)
     orig16 = work / "orig16k.wav"
     if not orig16.exists():
-        media.extract_audio(video, orig16, 16000, 1)
+        media.extract_audio(video, orig16, 16000, 1, stream=src)
     p(1.0)
     log.info("extract done in %.1fs", time.time() - t0)
 
@@ -96,7 +100,7 @@ def run_pipeline(video: Path, work: Path, out_path: Path, cfg: Settings,
 
     if not segments:
         p, _ = stage("mix")
-        media.mux(video, orig, out_path)
+        media.mux(video, orig, out_path, source_stream=src)
         stats["note"] = "No English speech detected; original audio kept."
         p(1.0)
         return stats
@@ -142,9 +146,43 @@ def run_pipeline(video: Path, work: Path, out_path: Path, cfg: Settings,
     audio.save(dubbed_wav, final, sr)
     p(0.5)
     _write_srt(segments, out_path.with_suffix(".hi.srt"))
-    media.mux(video, dubbed_wav, out_path)
+    media.mux(video, dubbed_wav, out_path, source_stream=src)
     p(1.0)
     return stats
+
+
+def choose_english_track(video: Path, work: Path, cfg: Settings, device: str,
+                         total: float, scorer=None) -> tuple[int, str]:
+    """Which audio track to dub. Telegram/movie files often carry several
+    (German, English, ...): use the one tagged English, else the one Whisper
+    hears as most English, else the first."""
+    cache = work / "source_track.json"
+    if cache.exists():
+        d = json.loads(cache.read_text())
+        return d["index"], d["how"]
+    streams = media.audio_streams(video)
+    if len(streams) <= 1:
+        idx, how = 0, "only audio track"
+    elif (tagged := media.tagged_english(streams)) is not None:
+        idx, how = tagged, "tagged English"
+    else:
+        start = max(0.0, total * 0.4)  # skip intros/silence at the start
+        clips = [media.extract_audio(video, work / f"langid_{s['index']}.wav", 16000, 1,
+                                     stream=s["index"], start=start, seconds=30)
+                 for s in streams]
+        if scorer is None:
+            from .transcribe import english_scores
+
+            def scorer(paths):
+                return english_scores(paths, cfg.resolved_whisper_model(), device)
+        scores = scorer(clips)
+        best = max(range(len(scores)), key=lambda i: scores[i])
+        idx, how = (best, f"detected English ({scores[best]:.0%})") if scores[best] > 0.3 \
+            else (0, "no English detected, used first track")
+        for c in clips:
+            c.unlink(missing_ok=True)
+    cache.write_text(json.dumps({"index": idx, "how": how}))
+    return idx, how
 
 
 def _separate(orig: Path, work: Path, cfg: Settings, device: str, p) -> tuple[Path, Path]:
