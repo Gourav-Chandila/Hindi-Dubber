@@ -1,0 +1,46 @@
+name: Backend
+
+on:
+  push:
+    branches: ["**"]
+    paths: ["backend/**", ".github/workflows/backend.yml"]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: pip install -r requirements-dev.txt
+      - run: ruff check app tests scripts
+      - run: pytest -q
+
+  deploy-hf-space:
+    # Fully automatic free hosting on Hugging Face Spaces.
+    # Needs: secret HF_TOKEN (write token) and variable HF_SPACE (e.g. "yourname/hindidub").
+    needs: test
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Deploy
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_SPACE: ${{ vars.HF_SPACE }}
+        run: |
+          if [ -z "$HF_TOKEN" ] || [ -z "$HF_SPACE" ]; then
+            echo "::warning::Set the HF_TOKEN secret and HF_SPACE variable to auto-deploy the backend."
+            exit 0
+          fi
+          pip install "huggingface_hub>=0.26"
+          python deploy/hf_space.py

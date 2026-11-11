@@ -1,0 +1,10 @@
+pytest==8.3.4
+httpx==0.28.1
+ruff==0.8.4
+numpy==1.26.4
+soundfile==0.12.1
+scipy==1.14.1
+scikit-learn==1.5.2
+fastapi==0.115.6
+python-multipart==0.0.20
+pydantic==2.10.4

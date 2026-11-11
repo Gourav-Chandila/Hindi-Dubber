@@ -1,0 +1,19 @@
+# Web / jobs
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+python-multipart==0.0.20
+pydantic==2.10.4
+
+# Audio / ML (CPU wheels are installed in the Dockerfile for torch)
+numpy==1.26.4
+soundfile==0.12.1
+scipy==1.14.1
+scikit-learn==1.5.2
+faster-whisper==1.1.0
+# demucs is installed with --no-deps in the Dockerfile (its pin on old torchaudio is too strict)
+speechbrain==1.0.2
+transformers==4.46.2
+sentencepiece==0.2.0
+coqui-tts==0.24.3
+pyrubberband==0.4.0
+pyloudnorm==0.1.1
