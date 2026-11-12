@@ -51,3 +51,20 @@ def test_describe_error_is_never_empty():
     except AssertionError as exc:
         msg = describe_error(exc)
     assert msg.startswith("AssertionError") and "test_api.py" in msg
+
+
+def test_upload_options_reach_the_job(client):
+    r = client.post("/uploads", json={"filename": "a.mkv", "size": 10, "speakers": 3,
+                                      "voice_mode": "clone"})
+    uid = r.json()["upload_id"]
+    client.put(f"/uploads/{uid}?offset=0", content=b"0123456789")
+    jid = client.post(f"/uploads/{uid}/complete").json()["job_id"]
+    assert client.get(f"/jobs/{jid}").json()["options"] == {"speakers": 3, "voice_mode": "clone"}
+
+
+def test_old_app_without_options_gets_defaults(client):
+    uid = client.post("/uploads", json={"filename": "a.mp4", "size": 1}).json()["upload_id"]
+    client.put(f"/uploads/{uid}?offset=0", content=b"x")
+    jid = client.post(f"/uploads/{uid}/complete").json()["job_id"]
+    assert client.get(f"/jobs/{jid}").json()["options"] == {"speakers": 0, "voice_mode": "studio"}
+    assert client.post("/uploads", json={"filename": "a", "size": 1, "speakers": 99}).status_code == 422

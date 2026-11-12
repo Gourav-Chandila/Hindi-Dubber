@@ -30,6 +30,14 @@ class HindiTTS:
         self.model = self.api.synthesizer.tts_model
         self.speakers: dict[int, Speaker] = {}
 
+    def studio_voices(self) -> list[str]:
+        sm = getattr(self.model, "speaker_manager", None)
+        return list(sm.speakers.keys()) if sm is not None else []
+
+    def register_studio(self, speaker_id: int, voice: str) -> None:
+        d = self.model.speaker_manager.speakers[voice]
+        self.speakers[speaker_id] = Speaker(d["gpt_cond_latent"], d["speaker_embedding"])
+
     def register(self, speaker_id: int, ref_wav: str) -> None:
         if speaker_id in self.speakers:
             return

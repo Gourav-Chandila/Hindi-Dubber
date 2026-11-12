@@ -6,10 +6,11 @@ import shutil
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Literal
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, UploadFile
+from fastapi import Depends, FastAPI, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .config import settings
 from .jobs import JobStore, Worker
@@ -64,6 +65,8 @@ def auth(x_api_key: str = Header(default="")) -> None:
 class NewUpload(BaseModel):
     filename: str
     size: int
+    speakers: int = Field(0, ge=0, le=20)  # exact number of characters, 0 = auto
+    voice_mode: Literal["studio", "clone"] = "studio"
 
 
 @app.get("/")
@@ -82,7 +85,8 @@ def create_upload(body: NewUpload) -> dict:
         raise HTTPException(400, "Empty file")
     if body.size > settings.max_upload_bytes:
         raise HTTPException(413, f"File too large (max {settings.max_upload_bytes // 2**20} MB)")
-    return {"upload_id": store.new_upload(body.filename, body.size), "received": 0}
+    options = {"speakers": body.speakers, "voice_mode": body.voice_mode}
+    return {"upload_id": store.new_upload(body.filename, body.size, options), "received": 0}
 
 
 @app.get("/uploads/{uid}", dependencies=[Depends(auth)])
@@ -126,8 +130,10 @@ def complete_upload(uid: str) -> dict:
 
 # ---- simple one-shot upload (curl / scripts) -------------------------------
 @app.post("/jobs", dependencies=[Depends(auth)])
-def create_job(file: UploadFile) -> dict:
+def create_job(file: UploadFile, speakers: int = Form(0, ge=0, le=20),
+               voice_mode: Literal["studio", "clone"] = Form("studio")) -> dict:
     jid = store.create_job(file.filename or "video.mp4")
+    store.set_job_options(jid, {"speakers": speakers, "voice_mode": voice_mode})
     from .jobs import _ext
 
     dst = store.job_dir(jid) / ("input" + _ext(file.filename or ""))

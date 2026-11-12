@@ -33,7 +33,11 @@ class Settings:
     speaker_threshold: float = field(
         default_factory=lambda: float(_env("HD_SPEAKER_THRESHOLD", "0.70"))
     )
-    max_stretch: float = field(default_factory=lambda: float(_env("HD_MAX_STRETCH", "1.35")))
+    max_stretch: float = field(default_factory=lambda: float(_env("HD_MAX_STRETCH", "1.2")))
+    # Ask for a shorter Hindi line as soon as it needs more than this speed-up.
+    shorten_above: float = field(default_factory=lambda: float(_env("HD_SHORTEN_ABOVE", "1.08")))
+    # "studio" = clean built-in voice per character; "clone" = imitate the actor.
+    voice_mode: str = field(default_factory=lambda: _env("HD_VOICE_MODE", "studio"))
     max_upload_bytes: int = field(
         default_factory=lambda: int(_env("HD_MAX_UPLOAD_MB", "4096")) * 1024 * 1024
     )

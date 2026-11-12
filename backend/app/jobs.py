@@ -49,12 +49,13 @@ class JobStore:
         self.db.commit()
 
     # ---- uploads ----------------------------------------------------------
-    def new_upload(self, filename: str, size: int) -> str:
+    def new_upload(self, filename: str, size: int, options: dict | None = None) -> str:
         uid = uuid.uuid4().hex
         with self._lock:
             self.db.execute("INSERT INTO uploads VALUES(?,?,?,?)", (uid, filename, size, time.time()))
             self.db.commit()
         self.upload_path(uid).touch()
+        self.upload_path(uid).with_suffix(".json").write_text(json.dumps(options or {}))
         return uid
 
     def upload_path(self, uid: str) -> Path:
@@ -75,6 +76,9 @@ class JobStore:
         job_id = self.create_job(up["filename"])
         dst = self.job_dir(job_id) / ("input" + _ext(up["filename"]))
         shutil.move(str(self.upload_path(uid)), dst)
+        opts = self.upload_path(uid).with_suffix(".json")
+        if opts.exists():
+            shutil.move(str(opts), self.job_dir(job_id) / "options.json")
         with self._lock:
             self.db.execute("DELETE FROM uploads WHERE id=?", (uid,))
             self.db.commit()
@@ -92,6 +96,13 @@ class JobStore:
             self.db.commit()
         self.job_dir(jid).mkdir(parents=True, exist_ok=True)
         return jid
+
+    def job_options(self, jid: str) -> dict:
+        p = self.job_dir(jid) / "options.json"
+        return json.loads(p.read_text()) if p.exists() else {}
+
+    def set_job_options(self, jid: str, options: dict) -> None:
+        (self.job_dir(jid) / "options.json").write_text(json.dumps(options))
 
     def job_dir(self, jid: str) -> Path:
         return self.jobs_dir / jid
@@ -121,6 +132,7 @@ class JobStore:
         d["eta_seconds"] = _eta(d)
         d["has_result"] = self.result_path(jid).exists()
         d["has_subtitles"] = self.result_path(jid).with_suffix(".hi.srt").exists()
+        d["options"] = self.job_options(jid)
         return d
 
     def pending(self) -> list[str]:
@@ -143,6 +155,7 @@ class JobStore:
             self.delete(row["id"])
         for row in self.db.execute("SELECT id FROM uploads WHERE created<?", (cutoff,)).fetchall():
             self.upload_path(row["id"]).unlink(missing_ok=True)
+            self.upload_path(row["id"]).with_suffix(".json").unlink(missing_ok=True)
             with self._lock:
                 self.db.execute("DELETE FROM uploads WHERE id=?", (row["id"],))
                 self.db.commit()
@@ -221,7 +234,8 @@ class Worker:
                 if video is None:
                     raise RuntimeError("Input video missing on server (it may have restarted).")
                 stats = run_pipeline(video, self.store.job_dir(jid) / "work",
-                                     self.store.result_path(jid), self.store.cfg, report)
+                                     self.store.result_path(jid), self.store.cfg, report,
+                                     options=self.store.job_options(jid))
                 shutil.rmtree(self.store.job_dir(jid) / "work", ignore_errors=True)
                 video.unlink(missing_ok=True)  # free disk; the result is all we need
                 self.store.update(jid, status="done", stage="done", progress=1.0, stats=stats)

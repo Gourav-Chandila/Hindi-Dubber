@@ -43,10 +43,16 @@ def _overall(stage: str, frac: float) -> float:
 
 
 def run_pipeline(video: Path, work: Path, out_path: Path, cfg: Settings,
-                 report: Progress) -> dict:
+                 report: Progress, options: dict | None = None) -> dict:
+    """options (from the app): speakers = exact number of characters (0 = auto),
+    voice_mode = "studio" | "clone"."""
     work.mkdir(parents=True, exist_ok=True)
     device = cfg.resolved_device()
-    stats: dict = {"device": device}
+    options = options or {}
+    n_speakers = int(options.get("speakers") or 0)
+    voice_mode = options.get("voice_mode") or cfg.voice_mode
+    stats: dict = {"device": device, "speakers_requested": n_speakers or "auto",
+                   "voice_mode": voice_mode}
 
     def stage(name: str):
         t0 = time.time()
@@ -109,7 +115,8 @@ def run_pipeline(video: Path, work: Path, out_path: Path, cfg: Settings,
     p, t0 = stage("diarize")
     from .diarize import diarize
 
-    segments = diarize(vocals16, segments, work, device, cfg.speaker_threshold, cfg.max_speakers)
+    segments = diarize(vocals16, segments, work, device, cfg.speaker_threshold, cfg.max_speakers,
+                       n_speakers)
     speakers = sorted({s["speaker"] for s in segments})
     stats["speakers"] = len(speakers)
     p(1.0)
@@ -133,7 +140,7 @@ def run_pipeline(video: Path, work: Path, out_path: Path, cfg: Settings,
 
     # 7. synthesize -----------------------------------------------------------
     p, t0 = stage("synthesize")
-    dub = _synthesize(segments, refs, work, cfg, device, translator, total, p, stats)
+    dub = _synthesize(segments, refs, work, cfg, device, translator, total, p, stats, voice_mode)
     del translator
     gc.collect()
     log.info("synthesize done in %.1fs", time.time() - t0)
@@ -192,12 +199,27 @@ def _separate(orig: Path, work: Path, cfg: Settings, device: str, p) -> tuple[Pa
 
 
 def _synthesize(segments, refs, work: Path, cfg: Settings, device: str, translator,
-                total: float, p, stats: dict) -> np.ndarray:
+                total: float, p, stats: dict, voice_mode: str = "studio") -> np.ndarray:
     from .tts import HindiTTS
 
     tts = HindiTTS(cfg.tts_model, device)
-    for spk, ref in refs.items():
-        tts.register(spk, ref)
+    studio = tts.studio_voices() if voice_mode == "studio" else []
+    if studio:
+        from .voices import assign_voices, estimate_pitch
+
+        pitches = {}
+        for spk, ref in refs.items():
+            x, sr = audio.load(Path(ref), mono=True)
+            pitches[spk] = estimate_pitch(x[:, 0], sr)
+        voices = assign_voices(pitches, studio)
+        for spk, v in voices.items():
+            tts.register_studio(spk, v["voice"])
+        stats["voices"] = {str(k): v for k, v in voices.items()}
+        log.info("studio voices: %s", voices)
+    else:
+        for spk, ref in refs.items():
+            tts.register(spk, ref)
+        stats["voices"] = "cloned from each character"
     seg_dir = work / "tts"
     seg_dir.mkdir(exist_ok=True)
     track = np.zeros(int(total * MIX_SR) + MIX_SR, dtype=np.float32)
@@ -241,7 +263,9 @@ def _render_line(tts, s: dict, slot: float, cfg: Settings, translator) -> np.nda
         return None
     wav = audio.resample(tts.synth(s["speaker"], speakable(text)), tts.sample_rate, MIX_SR)
     plan = timing.plan_fit(len(wav) / MIX_SR, slot, cfg.max_stretch)
-    if plan.needs_shorter:
+    # Prefer a shorter sentence over audible speed-up: try it as soon as the
+    # line would need more than a small speed-up, not only when it can't fit.
+    if plan.needs_shorter or plan.rate > cfg.shorten_above:
         short = translator([s["text"]], shorter=True)[0]
         if short and short != text:
             wav2 = audio.resample(tts.synth(s["speaker"], speakable(short)), tts.sample_rate, MIX_SR)

@@ -20,9 +20,11 @@ def _normalise(x: np.ndarray) -> np.ndarray:
     return x / (np.linalg.norm(x, axis=1, keepdims=True) + 1e-9)
 
 
-def cluster_embeddings(emb: np.ndarray, threshold: float, max_speakers: int) -> np.ndarray:
+def cluster_embeddings(emb: np.ndarray, threshold: float, max_speakers: int,
+                       n_speakers: int = 0) -> np.ndarray:
     """Agglomerative clustering on cosine similarity. Labels are renumbered in
-    order of first appearance (SPEAKER 0 = first person who talks)."""
+    order of first appearance (SPEAKER 0 = first person who talks).
+    n_speakers > 0 forces exactly that many characters (set in the app)."""
     n = len(emb)
     if n == 0:
         return np.zeros(0, dtype=int)
@@ -31,6 +33,11 @@ def cluster_embeddings(emb: np.ndarray, threshold: float, max_speakers: int) -> 
     from sklearn.cluster import AgglomerativeClustering
 
     emb = _normalise(emb)
+    if n_speakers > 0:
+        labels = AgglomerativeClustering(
+            n_clusters=min(n_speakers, n), metric="cosine", linkage="average",
+        ).fit_predict(emb)
+        return relabel_by_first_appearance(labels)
     labels = AgglomerativeClustering(
         n_clusters=None, metric="cosine", linkage="average",
         distance_threshold=1.0 - threshold,
@@ -63,7 +70,7 @@ def centroids_for(emb: np.ndarray, labels: np.ndarray) -> np.ndarray:
 
 
 def diarize(vocals16k: Path, segments: list[dict], work: Path, device: str,
-            threshold: float, max_speakers: int) -> list[dict]:
+            threshold: float, max_speakers: int, n_speakers: int = 0) -> list[dict]:
     cache = work / "diarized.json"
     if cache.exists():
         return json.loads(cache.read_text())
@@ -100,7 +107,7 @@ def diarize(vocals16k: Path, segments: list[dict], work: Path, device: str,
 
     labels = np.zeros(len(segments), dtype=int)
     if usable.any():
-        labels[usable] = cluster_embeddings(embs[usable], threshold, max_speakers)
+        labels[usable] = cluster_embeddings(embs[usable], threshold, max_speakers, n_speakers)
         if (~usable).any():
             # Too-short lines: copy the speaker of the nearest usable neighbour.
             idx_usable = np.flatnonzero(usable)
