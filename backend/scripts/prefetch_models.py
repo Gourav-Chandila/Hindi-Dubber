@@ -34,15 +34,19 @@ from TTS.api import TTS
 TTS(settings.tts_model)
 
 print("demucs", flush=True)
-with tempfile.TemporaryDirectory() as d:
-    import numpy as np
-    import soundfile as sf
+try:
+    with tempfile.TemporaryDirectory() as d:
+        import numpy as np
+        import soundfile as sf
 
-    wav = Path(d) / "s.wav"
-    # Demucs normalises by the signal's std, so pure silence would divide by zero.
-    t = np.linspace(0, 3, 3 * 44100, dtype="float32")
-    tone = 0.1 * np.sin(2 * np.pi * 220 * t)
-    sf.write(wav, np.stack([tone, tone], axis=1), 44100)
-    subprocess.run([sys.executable, "-m", "demucs", "--two-stems", "vocals", "-n", "htdemucs",
-                    "-d", "cpu", "-o", d, str(wav)], check=True)
+        wav = Path(d) / "s.wav"
+        # Demucs normalises by the signal's std, so pure silence would divide by zero.
+        t = np.linspace(0, 3, 3 * 44100, dtype="float32")
+        tone = 0.1 * np.sin(2 * np.pi * 220 * t)
+        sf.write(wav, np.stack([tone, tone], axis=1), 44100)
+        subprocess.run([sys.executable, "-m", "demucs", "--two-stems", "vocals", "-n", "htdemucs",
+                        "-d", "cpu", "-o", d, str(wav)], check=True)
+except Exception as exc:  # optional model: dubbing works without it
+    print(f"WARNING: Demucs (music separation) unavailable; dubbing will still work "
+          f"without it: {exc}", flush=True)
 print("all models ready", flush=True)

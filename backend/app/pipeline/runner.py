@@ -82,11 +82,8 @@ def run_pipeline(video: Path, work: Path, out_path: Path, cfg: Settings,
 
     # 2. separate ------------------------------------------------------------
     p, t0 = stage("separate")
-    if cfg.separate_music:
-        vocals, background = _separate(orig, work, cfg, device, p)
-        separated = True
-    else:
-        vocals, background, separated = orig, orig, False
+    vocals, background, separated, note = separate_or_fallback(orig, work, cfg, device, p)
+    stats["music_separation"] = note
     vocals16 = work / "vocals16k.wav"
     if not vocals16.exists():
         v, sr = audio.load(vocals, mono=True)
@@ -192,10 +189,24 @@ def choose_english_track(video: Path, work: Path, cfg: Settings, device: str,
     return idx, how
 
 
-def _separate(orig: Path, work: Path, cfg: Settings, device: str, p) -> tuple[Path, Path]:
-    from .separate import separate
-
-    return separate(orig, work, cfg.chunk_seconds, device, p)
+def separate_or_fallback(orig: Path, work: Path, cfg: Settings, device: str, p,
+                         separator=None) -> tuple[Path, Path, bool, str]:
+    """Split voices from music with Demucs. Best effort: if the model can't be
+    downloaded (e.g. its server has an expired certificate) or fails, keep
+    dubbing with the original track as background, ducked under the Hindi."""
+    if not cfg.separate_music:
+        return orig, orig, False, "off"
+    if separator is None:
+        from .separate import separate as separator
+    try:
+        vocals, background = separator(orig, work, cfg.chunk_seconds, device, p)
+        return vocals, background, True, "demucs"
+    except Exception as exc:  # noqa: BLE001
+        detail = getattr(exc, "stderr", b"") or b""
+        if isinstance(detail, bytes):
+            detail = detail.decode(errors="replace")
+        log.warning("music separation failed, continuing without it: %s %s", exc, detail[-1500:])
+        return orig, orig, False, "skipped (Demucs unavailable) - original sound ducked under Hindi"
 
 
 def _synthesize(segments, refs, work: Path, cfg: Settings, device: str, translator,

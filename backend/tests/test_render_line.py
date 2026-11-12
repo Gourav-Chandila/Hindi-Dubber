@@ -32,3 +32,15 @@ def test_short_enough_line_is_left_alone():
     seg = {"speaker": 0, "text": "Hi", "hi": "नमस्ते"}
     out = runner._render_line(FakeTTS(), seg, slot=2.0, cfg=Settings(), translator=translator)
     assert abs(len(out) / runner.MIX_SR - 0.6) < 0.01
+
+
+def test_dubbing_continues_when_music_separation_fails(tmp_path):
+    import subprocess
+
+    def broken_separator(*args, **kwargs):
+        raise subprocess.CalledProcessError(1, ["demucs"], stderr=b"SSL: CERTIFICATE_VERIFY_FAILED")
+
+    orig = tmp_path / "orig.wav"
+    vocals, bg, separated, note = runner.separate_or_fallback(
+        orig, tmp_path, Settings(), "cpu", lambda f: None, separator=broken_separator)
+    assert (vocals, bg, separated) == (orig, orig, False) and note.startswith("skipped")
