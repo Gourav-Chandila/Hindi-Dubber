@@ -72,8 +72,9 @@ class Api(baseUrl: String, private val apiKey: String) {
 
     fun health(): JSONObject = call(req("/health").get().build())
 
-    fun createUpload(name: String, size: Long): String {
-        val payload = JSONObject().put("filename", name).put("size", size).toString()
+    fun createUpload(name: String, size: Long, speakers: Int = 0, voiceMode: String = "studio"): String {
+        val payload = JSONObject().put("filename", name).put("size", size)
+            .put("speakers", speakers).put("voice_mode", voiceMode).toString()
         return call(req("/uploads").post(payload.toRequestBody(json)).build()).getString("upload_id")
     }
 

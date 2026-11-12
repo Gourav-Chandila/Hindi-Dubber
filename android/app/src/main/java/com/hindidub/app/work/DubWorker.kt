@@ -127,7 +127,8 @@ class DubWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, p
             id = saved
             offset = resumeAt
         } else {
-            id = api.createUpload(name, size)
+            id = api.createUpload(name, size,
+                inputData.getInt(KEY_SPEAKERS_WANTED, 0), inputData.getString(KEY_VOICE_MODE) ?: "studio")
             prefs.setUploadId(workKey, id)
             offset = 0L
         }
@@ -261,6 +262,8 @@ class DubWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, p
         const val KEY_JOB = "job"
         const val KEY_SPEAKERS = "speakers"
         const val KEY_RESULT = "result"
+        const val KEY_SPEAKERS_WANTED = "speakers_wanted"
+        const val KEY_VOICE_MODE = "voice_mode"
         const val KEY_ERROR = "error"
 
         const val STAGE_CONNECT = "connect"
@@ -272,9 +275,11 @@ class DubWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, p
         private const val CHUNK = 8 * 1024 * 1024
         private const val MAX_ATTEMPTS = 20
 
-        fun enqueue(context: Context, uri: Uri, name: String, size: Long) {
+        fun enqueue(context: Context, uri: Uri, name: String, size: Long,
+                    speakers: Int = 0, voiceMode: String = "studio") {
             val req = OneTimeWorkRequestBuilder<DubWorker>()
-                .setInputData(workDataOf(KEY_URI to uri.toString(), KEY_NAME to name, KEY_SIZE to size))
+                .setInputData(workDataOf(KEY_URI to uri.toString(), KEY_NAME to name, KEY_SIZE to size,
+                    KEY_SPEAKERS_WANTED to speakers, KEY_VOICE_MODE to voiceMode))
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
                 .addTag(UNIQUE)

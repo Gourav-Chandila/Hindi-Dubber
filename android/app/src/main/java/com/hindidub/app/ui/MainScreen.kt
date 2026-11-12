@@ -115,9 +115,9 @@ fun MainScreen(vm: MainViewModel) {
                 is DubState.Done -> ResultCard(s, onNew = vm::reset)
                 is DubState.Failed -> {
                     ErrorCard(s.message, onRetry = { if (picked != null) start() else vm.reset() })
-                    PickCard(picked, onPick = { pickVideo.launch(arrayOf("video/*")) }, onStart = start)
+                    PickCard(picked, vm, onPick = { pickVideo.launch(arrayOf("video/*")) }, onStart = start)
                 }
-                DubState.Idle -> PickCard(picked, onPick = { pickVideo.launch(arrayOf("video/*")) }, onStart = start)
+                DubState.Idle -> PickCard(picked, vm, onPick = { pickVideo.launch(arrayOf("video/*")) }, onStart = start)
             }
         }
     }
@@ -150,7 +150,7 @@ private fun SettingsCard(vm: MainViewModel) {
 }
 
 @Composable
-private fun PickCard(picked: PickedVideo?, onPick: () -> Unit, onStart: () -> Unit) {
+private fun PickCard(picked: PickedVideo?, vm: MainViewModel, onPick: () -> Unit, onStart: () -> Unit) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             FilledTonalButton(onClick = onPick, modifier = Modifier.fillMaxWidth()) {
@@ -167,6 +167,7 @@ private fun PickCard(picked: PickedVideo?, onPick: () -> Unit, onStart: () -> Un
                         if (picked.size > 0) Text(formatSize(picked.size), style = MaterialTheme.typography.bodySmall)
                     }
                 }
+                DubOptions(vm)
                 Button(onClick = onStart, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Filled.RecordVoiceOver, null)
                     Spacer(Modifier.width(8.dp))
@@ -177,6 +178,40 @@ private fun PickCard(picked: PickedVideo?, onPick: () -> Unit, onStart: () -> Un
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DubOptions(vm: MainViewModel) {
+    val speakers by vm.speakers.collectAsState()
+    val mode by vm.voiceMode.collectAsState()
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Characters who speak", style = MaterialTheme.typography.labelLarge)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            OutlinedButton(onClick = { vm.setSpeakers(speakers - 1) }, enabled = speakers > 0) { Text("−") }
+            Text(
+                if (speakers == 0) "Auto" else "$speakers",
+                modifier = Modifier.padding(horizontal = 16.dp).width(48.dp),
+                style = MaterialTheme.typography.titleMedium,
+            )
+            OutlinedButton(onClick = { vm.setSpeakers(speakers + 1) }, enabled = speakers < 10) { Text("+") }
+        }
+        Text(
+            if (speakers == 0) "Auto-detect. If voices get mixed up, set the exact number."
+            else "Exactly $speakers different voice(s) will be used.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text("Voice style", style = MaterialTheme.typography.labelLarge)
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+            listOf("studio" to "Studio (clear)", "clone" to "Clone (like actor)").forEachIndexed { i, (code, label) ->
+                SegmentedButton(
+                    selected = mode == code,
+                    onClick = { vm.setVoiceMode(code) },
+                    shape = SegmentedButtonDefaults.itemShape(i, 2),
+                ) { Text(label) }
             }
         }
     }

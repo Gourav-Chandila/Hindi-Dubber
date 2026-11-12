@@ -46,6 +46,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val server: StateFlow<String> = _server.asStateFlow()
     private val _apiKey = MutableStateFlow(prefs.apiKey)
     val apiKey: StateFlow<String> = _apiKey.asStateFlow()
+    private val _speakers = MutableStateFlow(prefs.speakers)
+    val speakers: StateFlow<Int> = _speakers.asStateFlow()
+    private val _voiceMode = MutableStateFlow(prefs.voiceMode)
+    val voiceMode: StateFlow<String> = _voiceMode.asStateFlow()
+
+    fun setSpeakers(n: Int) { val v = n.coerceIn(0, 10); _speakers.value = v; prefs.speakers = v }
+    fun setVoiceMode(m: String) { _voiceMode.value = m; prefs.voiceMode = m }
+
     private val _check = MutableStateFlow(ServerCheck())
     val check: StateFlow<ServerCheck> = _check.asStateFlow()
 
@@ -126,7 +134,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun startDub() {
         val v = _picked.value ?: return
         prefs.lastResultUri = null
-        DubWorker.enqueue(getApplication<Application>(), v.uri, v.name, v.size)
+        DubWorker.enqueue(getApplication<Application>(), v.uri, v.name, v.size,
+            _speakers.value, _voiceMode.value)
     }
 
     fun cancel() {

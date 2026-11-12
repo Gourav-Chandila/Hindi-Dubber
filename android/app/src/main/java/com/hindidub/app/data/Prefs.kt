@@ -16,6 +16,16 @@ class Prefs(context: Context) {
         get() = sp.getString("api_key", null)?.takeIf { it.isNotBlank() } ?: BuildConfig.DEFAULT_API_KEY
         set(v) = sp.edit { putString("api_key", v.trim()) }
 
+    /** Exact number of characters (0 = detect automatically). */
+    var speakers: Int
+        get() = sp.getInt("speakers", 0)
+        set(v) = sp.edit { putInt("speakers", v.coerceIn(0, 10)) }
+
+    /** "studio" = clear distinct voices, "clone" = imitate each actor. */
+    var voiceMode: String
+        get() = sp.getString("voice_mode", "studio") ?: "studio"
+        set(v) = sp.edit { putString("voice_mode", v) }
+
     var lastResultUri: String?
         get() = sp.getString("last_result", null)
         set(v) = sp.edit { putString("last_result", v) }
