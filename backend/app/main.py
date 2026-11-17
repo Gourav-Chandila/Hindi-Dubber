@@ -67,6 +67,9 @@ class NewUpload(BaseModel):
     size: int
     speakers: int = Field(0, ge=0, le=20)  # exact number of characters, 0 = auto
     voice_mode: Literal["studio", "clone"] = "studio"
+    # True = the phone uploads only the English audio and gets back only the
+    # Hindi audio, then adds it to the video itself (10-20x less data).
+    audio_only: bool = False
 
 
 @app.get("/")
@@ -85,7 +88,8 @@ def create_upload(body: NewUpload) -> dict:
         raise HTTPException(400, "Empty file")
     if body.size > settings.max_upload_bytes:
         raise HTTPException(413, f"File too large (max {settings.max_upload_bytes // 2**20} MB)")
-    options = {"speakers": body.speakers, "voice_mode": body.voice_mode}
+    options = {"speakers": body.speakers, "voice_mode": body.voice_mode,
+               "audio_only": body.audio_only}
     return {"upload_id": store.new_upload(body.filename, body.size, options), "received": 0}
 
 

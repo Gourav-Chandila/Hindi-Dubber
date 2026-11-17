@@ -49,6 +49,7 @@ def run_pipeline(video: Path, work: Path, out_path: Path, cfg: Settings,
     work.mkdir(parents=True, exist_ok=True)
     device = cfg.resolved_device()
     options = options or {}
+    audio_only = bool(options.get("audio_only"))
     n_speakers = int(options.get("speakers") or 0)
     voice_mode = options.get("voice_mode") or cfg.voice_mode
     stats: dict = {"device": device, "speakers_requested": n_speakers or "auto",
@@ -63,8 +64,9 @@ def run_pipeline(video: Path, work: Path, out_path: Path, cfg: Settings,
     p, t0 = stage("extract")
     if not media.has_stream(video, "audio"):
         raise PipelineError("This video has no audio track to dub.")
-    if not media.has_stream(video, "video"):
+    if not audio_only and not media.has_stream(video, "video"):
         raise PipelineError("No video stream found in the uploaded file.")
+    stats["audio_only"] = audio_only
     total = media.duration(video)
     stats["duration_s"] = round(total, 2)
     src, how = choose_english_track(video, work, cfg, device, total)
@@ -103,7 +105,10 @@ def run_pipeline(video: Path, work: Path, out_path: Path, cfg: Settings,
 
     if not segments:
         p, _ = stage("mix")
-        media.mux(video, orig, out_path, source_stream=src)
+        if audio_only:
+            media.encode_hindi_audio(orig, out_path)
+        else:
+            media.mux(video, orig, out_path, source_stream=src)
         stats["note"] = "No English speech detected; original audio kept."
         p(1.0)
         return stats
@@ -158,7 +163,10 @@ def run_pipeline(video: Path, work: Path, out_path: Path, cfg: Settings,
     audio.save(dubbed_wav, final, sr)
     p(0.5)
     _write_srt(segments, out_path.with_suffix(".hi.srt"))
-    media.mux(video, dubbed_wav, out_path, source_stream=src)
+    if audio_only:
+        media.encode_hindi_audio(dubbed_wav, out_path)  # the phone adds it to the video
+    else:
+        media.mux(video, dubbed_wav, out_path, source_stream=src)
     p(1.0)
     return stats
 

@@ -90,6 +90,14 @@ def mux(video: Path, dubbed_audio: Path, out: Path, source_stream: int = 0) -> P
     return out
 
 
+def encode_hindi_audio(dubbed_wav: Path, out: Path, bitrate: str = "128k") -> Path:
+    """Audio-only result (AAC in MP4/M4A) for the phone to add to the video."""
+    run(["ffmpeg", "-y", "-v", "error", "-i", str(dubbed_wav), "-map", "0:a:0",
+         "-c:a", "aac", "-b:a", bitrate, "-metadata:s:a:0", "language=hin",
+         "-metadata:s:a:0", "title=Hindi", "-movflags", "+faststart", "-f", "mp4", str(out)])
+    return out
+
+
 def video_stream_md5(path: Path) -> str:
     """MD5 of the raw (still-encoded) video packets; equal in & out => untouched."""
     out = run(["ffmpeg", "-v", "error", "-i", str(path), "-map", "0:v:0",

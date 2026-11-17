@@ -36,3 +36,13 @@ def test_mux_keeps_video_bit_exact(tmp_path):
     assert audio_streams[0]["tags"]["language"] == "hin"
     assert audio_streams[1]["tags"]["language"] == "eng"
     assert abs(media.duration(out) - media.duration(src)) < 0.2
+
+
+def test_audio_only_result_is_small_aac(tmp_path):
+    wav = tmp_path / "dub.wav"
+    audio.save(wav, (0.1 * np.sin(np.linspace(0, 3000, 44100 * 3))).astype(np.float32), 44100)
+    out = media.encode_hindi_audio(wav, tmp_path / "result.mp4")
+    streams = media.probe(out)["streams"]
+    assert [s["codec_type"] for s in streams] == ["audio"]
+    assert streams[0]["codec_name"] == "aac" and streams[0]["tags"]["language"] == "hin"
+    assert out.stat().st_size < 80_000  # ~3 s at 128 kb/s

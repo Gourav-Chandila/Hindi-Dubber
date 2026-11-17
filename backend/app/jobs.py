@@ -174,7 +174,8 @@ def describe_error(exc: BaseException) -> str:
 
 def _ext(name: str) -> str:
     suffix = Path(name or "").suffix.lower()
-    return suffix if suffix in {".mp4", ".mkv", ".mov", ".webm", ".avi", ".m4v", ".3gp"} else ".mp4"
+    known = {".mp4", ".mkv", ".mov", ".webm", ".avi", ".m4v", ".3gp", ".m4a", ".aac", ".mka"}
+    return suffix if suffix in known else ".mp4"
 
 
 def _eta(job: dict) -> int | None:

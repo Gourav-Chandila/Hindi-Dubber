@@ -59,12 +59,22 @@ def test_upload_options_reach_the_job(client):
     uid = r.json()["upload_id"]
     client.put(f"/uploads/{uid}?offset=0", content=b"0123456789")
     jid = client.post(f"/uploads/{uid}/complete").json()["job_id"]
-    assert client.get(f"/jobs/{jid}").json()["options"] == {"speakers": 3, "voice_mode": "clone"}
+    assert client.get(f"/jobs/{jid}").json()["options"] == {"speakers": 3, "voice_mode": "clone",
+                                                           "audio_only": False}
 
 
 def test_old_app_without_options_gets_defaults(client):
     uid = client.post("/uploads", json={"filename": "a.mp4", "size": 1}).json()["upload_id"]
     client.put(f"/uploads/{uid}?offset=0", content=b"x")
     jid = client.post(f"/uploads/{uid}/complete").json()["job_id"]
-    assert client.get(f"/jobs/{jid}").json()["options"] == {"speakers": 0, "voice_mode": "studio"}
+    assert client.get(f"/jobs/{jid}").json()["options"] == {"speakers": 0, "voice_mode": "studio",
+                                                           "audio_only": False}
     assert client.post("/uploads", json={"filename": "a", "size": 1, "speakers": 99}).status_code == 422
+
+
+def test_audio_only_upload_option(client):
+    r = client.post("/uploads", json={"filename": "english.m4a", "size": 4, "audio_only": True})
+    uid = r.json()["upload_id"]
+    client.put(f"/uploads/{uid}?offset=0", content=b"abcd")
+    jid = client.post(f"/uploads/{uid}/complete").json()["job_id"]
+    assert client.get(f"/jobs/{jid}").json()["options"]["audio_only"] is True
