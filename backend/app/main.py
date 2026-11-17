@@ -78,7 +78,7 @@ def health() -> dict:
     return {"ok": True, "service": "hindidub", "version": VERSION, "started": STARTED,
             "device": settings.resolved_device(),
             "busy": worker.current is not None, "queued": worker.q.qsize(),
-            "idle_seconds": int(time.time() - _last_activity)}
+            "idle_seconds": int(time.time() - _last_activity), "last_job": store.last_job()}
 
 
 # ---- resumable chunked upload (used by the Android app) --------------------

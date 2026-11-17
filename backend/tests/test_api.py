@@ -78,3 +78,14 @@ def test_audio_only_upload_option(client):
     client.put(f"/uploads/{uid}?offset=0", content=b"abcd")
     jid = client.post(f"/uploads/{uid}/complete").json()["job_id"]
     assert client.get(f"/jobs/{jid}").json()["options"]["audio_only"] is True
+
+
+def test_health_reports_engines_of_last_dub(client):
+    import app.main as main
+
+    assert client.get("/health").json()["last_job"] is None
+    main.store.save_last_job({"tts_engine": "xtts-studio", "translation_engine": "nllb",
+                              "voices": {"0": {"voice": "Ana Florence"}}, "secret_stuff": 1})
+    lj = client.get("/health").json()["last_job"]
+    assert lj["tts_engine"] == "xtts-studio" and lj["voices"] == {"0": "Ana Florence"}
+    assert "secret_stuff" not in lj

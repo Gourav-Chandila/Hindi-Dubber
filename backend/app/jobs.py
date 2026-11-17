@@ -104,6 +104,21 @@ class JobStore:
     def set_job_options(self, jid: str, options: dict) -> None:
         (self.job_dir(jid) / "options.json").write_text(json.dumps(options))
 
+    def save_last_job(self, stats: dict) -> None:
+        """Which engines the last finished dub really used (shown on /health)."""
+        keep = ("tts_engine", "translation_engine", "music_separation", "speakers", "voice_mode",
+                "audio_only", "duration_s", "lines_shortened", "lines_trimmed", "lines_failed")
+        summary = {k: stats[k] for k in keep if k in stats}
+        voices = stats.get("voices")
+        if isinstance(voices, dict):
+            summary["voices"] = {k: v.get("voice") or v.get("name") for k, v in voices.items()}
+        summary["finished"] = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime())
+        (self.cfg.data_dir / "last_job.json").write_text(json.dumps(summary))
+
+    def last_job(self) -> dict | None:
+        p = self.cfg.data_dir / "last_job.json"
+        return json.loads(p.read_text()) if p.exists() else None
+
     def job_dir(self, jid: str) -> Path:
         return self.jobs_dir / jid
 
@@ -240,6 +255,7 @@ class Worker:
                 shutil.rmtree(self.store.job_dir(jid) / "work", ignore_errors=True)
                 video.unlink(missing_ok=True)  # free disk; the result is all we need
                 self.store.update(jid, status="done", stage="done", progress=1.0, stats=stats)
+                self.store.save_last_job(stats)
             except Cancelled:
                 self.store.update(jid, status="cancelled", stage="cancelled")
             except Exception as exc:  # noqa: BLE001

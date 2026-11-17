@@ -39,10 +39,16 @@ def time_stretch(x: np.ndarray, sr: int, rate: float) -> np.ndarray:
         return x
     try:
         import pyrubberband as pyrb
-
-        return pyrb.time_stretch(x, sr, rate).astype(np.float32)
     except Exception:
         return _ola_stretch(x, rate)
+    # Rubber Band's newer "fine" engine (R3) keeps voices natural when sped up;
+    # older versions don't have it, so fall back to the default engine.
+    for args in ({"--fine": ""}, None):
+        try:
+            return pyrb.time_stretch(x, sr, rate, rbargs=args).astype(np.float32)
+        except Exception:
+            continue
+    return _ola_stretch(x, rate)
 
 
 def _ola_stretch(x: np.ndarray, rate: float, frame: int = 1024, hop_out: int = 256) -> np.ndarray:
