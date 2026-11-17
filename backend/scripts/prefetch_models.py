@@ -11,6 +11,26 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.config import settings
 
+
+def ai4bharat_models() -> None:
+    """Optional, better Hindi models. They may be gated on Hugging Face (need
+    HF_TOKEN + accepted terms); dubbing falls back to NLLB / XTTS without them."""
+    from huggingface_hub import snapshot_download
+
+    for repo in (settings.indictrans_model, settings.parler_model):
+        try:
+            snapshot_download(repo)
+            print(f"{repo}: ready", flush=True)
+        except Exception as exc:  # noqa: BLE001
+            print(f"WARNING: {repo} not available ({type(exc).__name__}); using the fallback. "
+                  "Add Kaggle secret HF_TOKEN and accept the model's terms on huggingface.co "
+                  "to enable it.", flush=True)
+
+
+if "--only-ai4bharat" in sys.argv:
+    ai4bharat_models()
+    sys.exit(0)
+
 print("whisper", settings.resolved_whisper_model(), flush=True)
 from faster_whisper import WhisperModel
 
@@ -49,4 +69,5 @@ try:
 except Exception as exc:  # optional model: dubbing works without it
     print(f"WARNING: Demucs (music separation) unavailable; dubbing will still work "
           f"without it: {exc}", flush=True)
+ai4bharat_models()
 print("all models ready", flush=True)

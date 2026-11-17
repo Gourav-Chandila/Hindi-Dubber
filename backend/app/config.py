@@ -24,6 +24,16 @@ class Settings:
     translate_model: str = field(
         default_factory=lambda: _env("HD_TRANSLATE_MODEL", "facebook/nllb-200-distilled-600M")
     )
+    # "auto" = IndicTrans2 if it can be loaded, else NLLB.
+    translate_engine: str = field(default_factory=lambda: _env("HD_TRANSLATE_ENGINE", "auto"))
+    indictrans_model: str = field(
+        default_factory=lambda: _env("HD_INDICTRANS_MODEL", "ai4bharat/indictrans2-en-indic-1B")
+    )
+    # "auto" = Indic Parler-TTS (natural Hindi) for studio voices if it loads, else XTTS.
+    tts_engine: str = field(default_factory=lambda: _env("HD_TTS_ENGINE", "auto"))
+    parler_model: str = field(
+        default_factory=lambda: _env("HD_PARLER_MODEL", "ai4bharat/indic-parler-tts")
+    )
     tts_model: str = field(
         default_factory=lambda: _env("HD_TTS_MODEL", "tts_models/multilingual/multi-dataset/xtts_v2")
     )

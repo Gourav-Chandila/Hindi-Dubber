@@ -44,7 +44,9 @@ class HindiTTS:
         lat, emb = self.model.get_conditioning_latents(audio_path=[ref_wav])
         self.speakers[speaker_id] = Speaker(lat, emb)
 
-    def synth(self, speaker_id: int, text: str, speed: float = 1.0) -> np.ndarray:
+    name = "xtts"
+
+    def synth(self, speaker_id: int, text: str, speed: float = 1.0, style: dict | None = None) -> np.ndarray:
         spk = self.speakers[speaker_id]
         out = self.model.inference(
             text, "hi", spk.gpt_cond_latent, spk.speaker_embedding,

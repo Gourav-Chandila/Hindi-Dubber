@@ -20,6 +20,43 @@ ngrok_path = conf.get_default().ngrok_path
 if not os.path.exists(ngrok_path):
     installer.install_ngrok(ngrok_path)
 
+# Optional Hugging Face token (Kaggle secret HF_TOKEN) for the gated AI4Bharat
+# models (better Hindi translation + voice). Restart the API server with it.
+try:
+    from kaggle_secrets import UserSecretsClient
+
+    _hf_token = UserSecretsClient().get_secret("HF_TOKEN")
+except Exception:
+    _hf_token = ""
+if _hf_token and ENV.get("HF_TOKEN") != _hf_token:  # noqa: F821
+    ENV["HF_TOKEN"] = _hf_token  # noqa: F821
+    _proc = getattr(server, "proc", server)  # noqa: F821
+    _proc.terminate()
+    try:
+        _proc.wait(30)
+    except subprocess.TimeoutExpired:
+        _proc.kill()
+    _new = subprocess.Popen(_proc.args, cwd="/tmp/hindidub-src/backend", env=ENV,  # noqa: F821
+                            stdout=open("/tmp/server.log", "a"), stderr=subprocess.STDOUT)
+    if hasattr(server, "proc"):  # noqa: F821
+        server.proc = _new  # noqa: F821
+    else:
+        server = _new
+    for _ in range(60):
+        try:
+            requests.get("http://127.0.0.1:7860/health", timeout=3)
+            break
+        except Exception:
+            time.sleep(2)
+    # fetch the AI4Bharat models in the background so the first dub isn't slowed down
+    subprocess.Popen([PY, "scripts/prefetch_models.py", "--only-ai4bharat"],  # noqa: F821
+                     cwd="/tmp/hindidub-src/backend", env=ENV,  # noqa: F821
+                     stdout=open("/tmp/prefetch_ai4bharat.log", "w"), stderr=subprocess.STDOUT)
+    print("🔑 Hugging Face token loaded - better Hindi models enabled", flush=True)
+elif not _hf_token:
+    print("ℹ️ No HF_TOKEN secret: using standard Hindi models (add it for better Hindi).",
+          flush=True)
+
 PUBLIC_URL = f"https://{NGROK_DOMAIN}"  # noqa: F821  (defined in the notebook)
 
 # If another session already serves HindiDub at this URL, don't start a

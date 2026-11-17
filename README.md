@@ -65,6 +65,17 @@ The server runs **free on a Kaggle GPU** and is reached through a **free fixed n
 
 Then **Actions → Android APK → Run workflow** and install the APK from the `HindiDub-apk` artifact.
 
+### 4. Better Hindi (optional, recommended)
+HindiDub uses AI4Bharat models when it can: **IndicTrans2** for natural Hindi translation and
+**Indic Parler-TTS** for natural Hindi voices. They may need a free Hugging Face token:
+1. Log in at <https://huggingface.co> and open
+   <https://huggingface.co/ai4bharat/indictrans2-en-indic-1B> and
+   <https://huggingface.co/ai4bharat/indic-parler-tts>. If you see **"Agree and access"**, click it.
+2. Create a **Read** token at <https://huggingface.co/settings/tokens>.
+3. Kaggle notebook → **Add-ons → Secrets** → add `HF_TOKEN` = the token, and tick it.
+
+Without the token, dubbing still works with the standard models (NLLB + XTTS).
+
 ### Every time you dub
 1. In Kaggle: **Save Version → Save & Run All (Commit)**. It runs in the background and is ready in about 10 minutes.
 2. On your phone: open HindiDub → pick a video → **Dub to Hindi**.

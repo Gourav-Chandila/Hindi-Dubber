@@ -8,7 +8,7 @@ from app.pipeline import runner
 class FakeTTS:
     sample_rate = runner.MIX_SR
 
-    def synth(self, speaker, text):  # 0.1 s of audio per character
+    def synth(self, speaker, text, style=None):  # 0.1 s of audio per character
         return np.ones(int(len(text) * 0.1 * self.sample_rate), np.float32) * 0.1
 
 

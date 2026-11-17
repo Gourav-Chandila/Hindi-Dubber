@@ -12,8 +12,12 @@ scikit-learn==1.5.2
 faster-whisper==1.1.0
 # demucs is installed with --no-deps in the Dockerfile (its pin on old torchaudio is too strict)
 speechbrain==1.0.2
-transformers==4.46.2
+transformers==4.46.1
 sentencepiece==0.2.0
 coqui-tts==0.24.3
 pyrubberband==0.4.0
 pyloudnorm==0.1.1
+# Better Hindi: AI4Bharat IndicTrans2 (translation) + Indic Parler-TTS (voice).
+# Optional at runtime: the pipeline falls back to NLLB / XTTS if they can't load.
+IndicTransToolkit==1.1.1
+parler-tts==0.2.3

@@ -127,11 +127,19 @@ def run_pipeline(video: Path, work: Path, out_path: Path, cfg: Settings,
     refs = build_references(vocals, segments, work)
     p(1.0)
 
+    # Scene matching: how loud / lively / fast each original line was spoken.
+    from .emotion import annotate
+
+    if not all("style" in s for s in segments):
+        v16, sr16 = audio.load(vocals16, mono=True)
+        annotate(segments, v16[:, 0], sr16)
+
     # 6. translate ------------------------------------------------------------
     p, t0 = stage("translate")
-    from .translate import Translator, translate_segments
+    from .translate import make_translator, translate_segments
 
-    translator = Translator(cfg.translate_model, device)
+    translator, stats["translation_engine"] = make_translator(
+        cfg.translate_engine, cfg.indictrans_model, cfg.translate_model, device, log)
     segments = translate_segments(segments, work, translator, p)
     log.info("translate done in %.1fs", time.time() - t0)
 
@@ -209,28 +217,55 @@ def separate_or_fallback(orig: Path, work: Path, cfg: Settings, device: str, p,
         return orig, orig, False, "skipped (Demucs unavailable) - original sound ducked under Hindi"
 
 
-def _synthesize(segments, refs, work: Path, cfg: Settings, device: str, translator,
-                total: float, p, stats: dict, voice_mode: str = "studio") -> np.ndarray:
+def _load_tts(refs, cfg: Settings, device: str, stats: dict, voice_mode: str):
+    """Natural Hindi (Indic Parler-TTS) for studio mode when available,
+    else XTTS studio voices; XTTS cloning for clone mode."""
+    from .voices import FEMALE_ABOVE_HZ, estimate_pitch
+
+    pitches = {}
+    for spk, ref in refs.items():
+        x, sr = audio.load(Path(ref), mono=True)
+        pitches[spk] = estimate_pitch(x[:, 0], sr)
+    genders = {spk: "female" if f0 >= FEMALE_ABOVE_HZ else "male" for spk, f0 in pitches.items()}
+
+    if voice_mode != "clone" and cfg.tts_engine in ("auto", "parler"):
+        try:
+            from .parler import ParlerHindiTTS, character_voices
+
+            tts = ParlerHindiTTS(cfg.parler_model, device)
+            voices = character_voices(genders)
+            tts.set_voices(voices)
+            stats["tts_engine"] = tts.name
+            stats["voices"] = {str(k): v for k, v in voices.items()}
+            log.info("indic parler voices: %s", voices)
+            return tts
+        except Exception as exc:  # noqa: BLE001 - fall back to XTTS, never fail the job
+            log.warning("Indic Parler-TTS unavailable (%s); using XTTS. If the model is gated, "
+                        "add a Hugging Face token (HF_TOKEN) and accept its terms.", exc)
+
     from .tts import HindiTTS
 
     tts = HindiTTS(cfg.tts_model, device)
-    studio = tts.studio_voices() if voice_mode == "studio" else []
+    studio = tts.studio_voices() if voice_mode != "clone" else []
     if studio:
-        from .voices import assign_voices, estimate_pitch
+        from .voices import assign_voices
 
-        pitches = {}
-        for spk, ref in refs.items():
-            x, sr = audio.load(Path(ref), mono=True)
-            pitches[spk] = estimate_pitch(x[:, 0], sr)
         voices = assign_voices(pitches, studio)
         for spk, v in voices.items():
             tts.register_studio(spk, v["voice"])
+        stats["tts_engine"] = "xtts-studio"
         stats["voices"] = {str(k): v for k, v in voices.items()}
-        log.info("studio voices: %s", voices)
     else:
         for spk, ref in refs.items():
             tts.register(spk, ref)
+        stats["tts_engine"] = "xtts-clone"
         stats["voices"] = "cloned from each character"
+    return tts
+
+
+def _synthesize(segments, refs, work: Path, cfg: Settings, device: str, translator,
+                total: float, p, stats: dict, voice_mode: str = "studio") -> np.ndarray:
+    tts = _load_tts(refs, cfg, device, stats, voice_mode)
     seg_dir = work / "tts"
     seg_dir.mkdir(exist_ok=True)
     track = np.zeros(int(total * MIX_SR) + MIX_SR, dtype=np.float32)
@@ -272,14 +307,17 @@ def _render_line(tts, s: dict, slot: float, cfg: Settings, translator) -> np.nda
     text = (s.get("hi") or "").strip()
     if not text or slot <= 0.1:
         return None
-    wav = audio.resample(tts.synth(s["speaker"], speakable(text)), tts.sample_rate, MIX_SR)
+    style = s.get("style")
+    wav = audio.resample(tts.synth(s["speaker"], speakable(text), style=style),
+                         tts.sample_rate, MIX_SR)
     plan = timing.plan_fit(len(wav) / MIX_SR, slot, cfg.max_stretch)
     # Prefer a shorter sentence over audible speed-up: try it as soon as the
     # line would need more than a small speed-up, not only when it can't fit.
     if plan.needs_shorter or plan.rate > cfg.shorten_above:
         short = translator([s["text"]], shorter=True)[0]
         if short and short != text:
-            wav2 = audio.resample(tts.synth(s["speaker"], speakable(short)), tts.sample_rate, MIX_SR)
+            wav2 = audio.resample(tts.synth(s["speaker"], speakable(short), style=style),
+                                  tts.sample_rate, MIX_SR)
             if len(wav2) < len(wav):
                 wav, s["hi"], s["shortened"] = wav2, short, True
                 plan = timing.plan_fit(len(wav) / MIX_SR, slot, cfg.max_stretch)
@@ -287,7 +325,9 @@ def _render_line(tts, s: dict, slot: float, cfg: Settings, translator) -> np.nda
     fitted = timing.fit_to_slot(wav, MIX_SR, slot)
     if len(fitted) < len(wav):
         s["trimmed"] = True
-    return fitted
+    from .emotion import match_loudness
+
+    return match_loudness(fitted, style)  # shouts stay loud, whispers soft
 
 
 def _fmt(t: float) -> str:

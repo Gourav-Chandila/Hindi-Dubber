@@ -19,16 +19,18 @@ def transcribe(wav16k: Path, work: Path, model_name: str, device: str,
     seg_iter, _info = model.transcribe(
         str(wav16k), language="en", vad_filter=True,
         vad_parameters={"min_silence_duration_ms": 400},
-        word_timestamps=False, condition_on_previous_text=False, beam_size=5,
+        word_timestamps=True, condition_on_previous_text=False, beam_size=5,
     )
-    segments: list[dict] = []
+    # Word timestamps -> precise sentence-sized lines (see segmenting.py).
+    words: list[dict] = []
     for s in seg_iter:
-        text = s.text.strip()
-        if not text:
-            continue
-        segments.append({"start": round(s.start, 3), "end": round(s.end, 3), "text": text})
+        for w in s.words or []:
+            words.append({"start": w.start, "end": w.end, "word": w.word})
         if total_seconds:
             progress(min(1.0, s.end / total_seconds))
+    from .segmenting import resegment
+
+    segments = resegment(words)
     cache.write_text(json.dumps(segments, ensure_ascii=False, indent=1))
     return segments
 

@@ -20,7 +20,7 @@ def speech_mask(segments: list[dict], n: int, sr: int, pad: float = 0.15) -> np.
         b = min(n, int((s["end"] + pad) * sr))
         mask[a:b] = 1.0
     # Smooth edges (~80 ms) so ducking does not click.
-    k = max(1, int(0.08 * sr))
+    k = max(1, int(0.15 * sr))  # ~150 ms fades: smoother music dips under speech
     kernel = np.ones(k, dtype=np.float32) / k
     return np.clip(np.convolve(mask, kernel, mode="same"), 0.0, 1.0)
 
@@ -31,7 +31,7 @@ def mix(dub: np.ndarray, background: np.ndarray, segments: list[dict], sr: int,
     English voices (no separation) it is ducked hard under the Hindi speech."""
     n = len(background)
     dub = dub[:n] if len(dub) >= n else np.pad(dub, (0, n - len(dub)))
-    duck_depth = 0.25 if separated else 0.9
+    duck_depth = 0.35 if separated else 0.9
     gain = 1.0 - duck_depth * speech_mask(segments, n, sr)
     out = background * gain[:, None] + dub[:, None]
     return normalise_loudness(out, sr)
