@@ -30,6 +30,10 @@ jobs:
           packages: "platform-tools platforms;android-35 build-tools;35.0.0"
 
       - uses: gradle/actions/setup-gradle@v4
+        with:
+          # Save the Gradle cache on every branch (default: only on main), so
+          # libraries aren't downloaded again on each build.
+          cache-read-only: false
 
       - name: Work out server URL
         # Priority: HINDIDUB_SERVER_URL > NGROK_DOMAIN (Kaggle) > HF_SPACE.
@@ -70,9 +74,9 @@ jobs:
           HINDIDUB_API_KEY: ${{ secrets.HINDIDUB_API_KEY }}
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon assembleDebug assembleRelease
+          # Only the installable release APK (the debug build was never used).
+          ./gradlew --no-daemon assembleRelease
           mkdir -p out
-          cp app/build/outputs/apk/debug/app-debug.apk "out/HindiDub-${VERSION_NAME}-debug.apk"
           cp app/build/outputs/apk/release/app-release.apk "out/HindiDub-${VERSION_NAME}.apk"
           ls -lh out
 
