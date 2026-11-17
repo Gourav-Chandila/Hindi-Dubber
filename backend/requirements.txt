@@ -21,3 +21,5 @@ pyloudnorm==0.1.1
 # Optional at runtime: the pipeline falls back to NLLB / XTTS if they can't load.
 IndicTransToolkit==1.1.1
 parler-tts==0.2.3
+# Natural Hindi voices without any token (fallback before XTTS).
+kokoro==0.9.4

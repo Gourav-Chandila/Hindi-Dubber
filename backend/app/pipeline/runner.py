@@ -247,9 +247,22 @@ def _load_tts(refs, cfg: Settings, device: str, stats: dict, voice_mode: str):
             stats["voices"] = {str(k): v for k, v in voices.items()}
             log.info("indic parler voices: %s", voices)
             return tts
-        except Exception as exc:  # noqa: BLE001 - fall back to XTTS, never fail the job
-            log.warning("Indic Parler-TTS unavailable (%s); using XTTS. If the model is gated, "
-                        "add a Hugging Face token (HF_TOKEN) and accept its terms.", exc)
+        except Exception as exc:  # noqa: BLE001 - fall back, never fail the job
+            log.warning("Indic Parler-TTS unavailable (%s); trying Kokoro (no token needed).", exc)
+
+    if voice_mode != "clone" and cfg.tts_engine in ("auto", "parler", "kokoro"):
+        try:
+            from . import kokoro_tts
+
+            tts = kokoro_tts.KokoroHindiTTS(device)
+            voices = kokoro_tts.character_voices(genders)
+            tts.set_voices(voices)
+            stats["tts_engine"] = tts.name
+            stats["voices"] = {str(k): v for k, v in voices.items()}
+            log.info("kokoro voices: %s", voices)
+            return tts
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Kokoro unavailable (%s); using XTTS voices.", exc)
 
     from .tts import HindiTTS
 

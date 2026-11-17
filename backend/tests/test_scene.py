@@ -85,3 +85,33 @@ def test_voice_falls_back_to_xtts_when_parler_missing(tmp_path, monkeypatch):
     stats = {}
     tts = runner._load_tts(refs, Settings(), "cpu", stats, "studio")  # parler_tts not installed here
     assert stats["tts_engine"] == "xtts-studio" and tts.studio == {0: "Ana Florence", 1: "Damien Black"}
+
+
+def test_kokoro_voices_distinct_and_pace():
+    from app.pipeline import kokoro_tts
+
+    v = kokoro_tts.character_voices({0: "female", 1: "male", 2: "male", 3: "female", 4: "male"})
+    assert len({(x["voice"], x["speed"]) for x in v.values()}) == 5
+    assert v[0]["voice"].startswith("hf_") and v[1]["voice"].startswith("hm_")
+    assert kokoro_tts.line_speed(1.0, {"pace": "fast"}) > 1.0 > kokoro_tts.line_speed(1.0, {"pace": "slow"})
+
+
+def test_kokoro_used_when_parler_missing(tmp_path, monkeypatch):
+    from app.pipeline import kokoro_tts
+
+    class FakeKokoro:
+        name = "kokoro"
+        sample_rate = 24000
+
+        def __init__(self, device):
+            self.voices = {}
+
+        def set_voices(self, v):
+            self.voices = v
+
+    monkeypatch.setattr(kokoro_tts, "KokoroHindiTTS", FakeKokoro)
+    p = tmp_path / "s0.wav"
+    audio.save(p, _tone(220, 2, 0.3), SR)
+    stats = {}
+    tts = runner._load_tts({0: str(p)}, Settings(), "cpu", stats, "studio")
+    assert stats["tts_engine"] == "kokoro" and tts.voices[0]["voice"].startswith("hf_")

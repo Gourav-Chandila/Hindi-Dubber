@@ -27,6 +27,19 @@ def ai4bharat_models() -> None:
                   "to enable it.", flush=True)
 
 
+def kokoro_model() -> None:
+    """Kokoro Hindi voices: public, no token needed."""
+    try:
+        from kokoro import KPipeline
+
+        pipe = KPipeline(lang_code="h", repo_id="hexgrad/Kokoro-82M", device="cpu")
+        for voice in ("hf_alpha", "hf_beta", "hm_omega", "hm_psi"):
+            pipe.load_voice(voice)
+        print("kokoro: ready", flush=True)
+    except Exception as exc:  # noqa: BLE001
+        print(f"WARNING: Kokoro not available ({exc}); XTTS voices will be used.", flush=True)
+
+
 if "--only-ai4bharat" in sys.argv:
     ai4bharat_models()
     sys.exit(0)
@@ -70,4 +83,5 @@ except Exception as exc:  # optional model: dubbing works without it
     print(f"WARNING: Demucs (music separation) unavailable; dubbing will still work "
           f"without it: {exc}", flush=True)
 ai4bharat_models()
+kokoro_model()
 print("all models ready", flush=True)
