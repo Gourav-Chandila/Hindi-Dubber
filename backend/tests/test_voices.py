@@ -36,9 +36,6 @@ def test_forced_number_of_characters():
     rng = np.random.default_rng(3)
     centres = [rng.standard_normal(192) for _ in range(3)]
     emb = np.vstack([c + 0.05 * rng.standard_normal((10, 192)) for c in centres])
-    # threshold so strict that auto mode would split everyone apart...
-    auto = cluster_embeddings(emb, threshold=0.9999, max_speakers=20)
-    assert len(set(auto)) > 3
-    # ...but the user said "3 characters"
     forced = cluster_embeddings(emb, threshold=0.9999, max_speakers=20, n_speakers=3)
     assert len(set(forced)) == 3
+    assert len(set(cluster_embeddings(emb, threshold=0.7, max_speakers=20, n_speakers=5))) == 5

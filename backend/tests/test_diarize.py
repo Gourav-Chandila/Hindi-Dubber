@@ -35,3 +35,23 @@ def test_max_speakers_cap():
 def test_assign_to_centroids():
     c = np.eye(3, 192)
     assert list(diarize.assign_to_centroids(c[[2, 0, 1]] + 0.01, c)) == [2, 0, 1]
+
+
+def test_auto_finds_the_right_number_of_characters():
+    rng = np.random.default_rng(7)
+    for true_k in (1, 2, 4, 6):
+        centres = [rng.standard_normal(192) for _ in range(true_k)]
+        emb, _ = _voices(rng, 12, centres)
+        assert len(set(diarize.cluster_embeddings(emb, 0.7, max_speakers=8))) == true_k
+
+
+def test_tiny_fake_character_is_merged_into_a_real_one():
+    rng = np.random.default_rng(11)
+    centres = [rng.standard_normal(192) for _ in range(3)]
+    emb, _ = _voices(rng, 15, centres)
+    # one odd line (a shout / music) that sounds a bit like nobody, only 1.2 s long
+    odd = 0.6 * centres[0] + 0.4 * rng.standard_normal(192)
+    emb = np.vstack([emb, odd, odd + 0.01])
+    durations = np.r_[np.full(45, 3.0), 0.6, 0.6]
+    labels = diarize.cluster_embeddings(emb, 0.7, max_speakers=8, durations=durations)
+    assert len(set(labels)) == 3  # still exactly the 3 real characters
