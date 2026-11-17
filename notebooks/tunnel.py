@@ -1,10 +1,12 @@
-"""Start the public ngrok tunnel to the local HindiDub server.
+"""Make the local HindiDub server reachable from the phone.
 
-Run from the Kaggle notebook with exec(), so it uses the notebook's
-NGROK_AUTHTOKEN / NGROK_DOMAIN variables. Calls the ngrok agent directly
-(newer agents renamed the "domain" setting to "url", which broke pyngrok's
-connect()); tries --url first and falls back to --domain for older agents.
+Run from the Kaggle notebook with exec(), so it uses the notebook's globals.
+Uses a free Cloudflare quick tunnel (no account, no monthly data cap); its
+address changes every run, so it is announced on a private ntfy.sh topic
+derived from the HindiDub API key, where the app looks it up. Falls back to
+the fixed ngrok domain (free plan: 1 GB/month) if Cloudflare fails.
 """
+import json
 import os
 import subprocess
 import time
@@ -57,64 +59,114 @@ elif not _hf_token:
     print("ℹ️ No HF_TOKEN secret: using standard Hindi models (add it for better Hindi).",
           flush=True)
 
-PUBLIC_URL = f"https://{NGROK_DOMAIN}"  # noqa: F821  (defined in the notebook)
+import hashlib
+import re
 
-# If another session already serves HindiDub at this URL, don't start a
-# duplicate (it would only burn GPU hours and fight over the domain).
-try:
-    _r = requests.get(f"{PUBLIC_URL}/health", timeout=10,
-                      headers={"ngrok-skip-browser-warning": "1"})
-    if _r.ok and _r.json().get("service") == "hindidub":
-        server.terminate()  # noqa: F821
-        raise SystemExit(
-            f"Another session is ALREADY serving HindiDub at {PUBLIC_URL} - use the app now. "
-            "This duplicate run stops here to save your GPU hours.")
-except (requests.RequestException, ValueError):
-    pass  # nobody is serving yet: start our tunnel below
+# The app finds the server through a private ntfy.sh topic derived from the
+# HindiDub API key, so the tunnel address may change on every run.
+_key = API_KEY or NGROK_DOMAIN  # noqa: F821  (notebook globals)
+NTFY_TOPIC = "hindidub-" + hashlib.sha256(_key.encode()).hexdigest()[:24]
 
-ngrok_proc = None
-# ERR_NGROK_334 = the domain is still held by another session (an older run
-# that is shutting down, or a second session). Wait for it to go away.
-for attempt in range(12):
-    if attempt:
-        print(f"ngrok domain still in use by another session - retrying ({attempt}/11) ...",
-              flush=True)
-        time.sleep(15)
-    for flag in ("--url", "--domain"):
-        ngrok_proc = subprocess.Popen(
-            [ngrok_path, "http", "7860", f"{flag}={NGROK_DOMAIN}",  # noqa: F821
-             "--authtoken", NGROK_AUTHTOKEN, "--log", "stdout"],  # noqa: F821
-            stdout=open("/tmp/ngrok.log", "w"), stderr=subprocess.STDOUT)
-        for _ in range(25):
-            time.sleep(1)
-            if ngrok_proc.poll() is not None:
-                break
-            try:
-                r = requests.get(f"{PUBLIC_URL}/health", timeout=5,
-                                 headers={"ngrok-skip-browser-warning": "1"})
-                if r.ok and r.json().get("service") == "hindidub":
-                    break
-            except Exception:
-                pass
-        else:
-            ngrok_proc.kill()
-            ngrok_proc.wait()  # so poll() reports it as stopped
-            continue
-        if ngrok_proc.poll() is None:
+
+def _healthy(url):
+    try:
+        r = requests.get(f"{url}/health", timeout=8, headers={"ngrok-skip-browser-warning": "1"})
+        return r.ok and r.json().get("service") == "hindidub"
+    except Exception:
+        return False
+
+
+def _published_url():
+    try:
+        lines = requests.get(f"https://ntfy.sh/{NTFY_TOPIC}/json?poll=1&since=12h",
+                             timeout=10).text.strip().splitlines()
+        msgs = [json.loads(x) for x in lines if x.strip()]
+        msgs = [m["message"] for m in msgs if m.get("event") == "message"]
+        return msgs[-1].strip() if msgs else None
+    except Exception:
+        return None
+
+
+def publish_url(url):
+    try:
+        requests.post(f"https://ntfy.sh/{NTFY_TOPIC}", data=url.encode(), timeout=10,
+                      headers={"Title": "hindidub-server", "Tags": "hindidub"})
+        return True
+    except Exception as exc:
+        print("could not publish server address:", exc, flush=True)
+        return False
+
+
+def _start_cloudflare():
+    """Free Cloudflare quick tunnel: no account, no monthly data cap."""
+    exe = "/tmp/cloudflared"
+    if not os.path.exists(exe):
+        subprocess.run(["curl", "-sSL", "-o", exe, "https://github.com/cloudflare/cloudflared/"
+                        "releases/latest/download/cloudflared-linux-amd64"], check=True)
+        os.chmod(exe, 0o755)
+    proc = subprocess.Popen([exe, "tunnel", "--no-autoupdate", "--url", "http://127.0.0.1:7860"],
+                            stdout=open("/tmp/cloudflared.log", "w"), stderr=subprocess.STDOUT)
+    url = None
+    for _ in range(60):
+        time.sleep(1)
+        if proc.poll() is not None:
             break
-    if ngrok_proc.poll() is None:
-        break  # tunnel is up
-    if "ERR_NGROK_334" not in open("/tmp/ngrok.log").read():
-        break  # a different error: don't keep retrying
-if ngrok_proc.poll() is not None:
-    log_text = open("/tmp/ngrok.log").read()
-    print(log_text[-3000:])
-    if "ERR_NGROK_334" in log_text:
-        raise RuntimeError(
-            "Your ngrok domain is used by ANOTHER running session. In Kaggle open "
-            "'View Active Events' (bottom-left), stop every other HindiDub session, then run again.")
+        m = re.search(r"https://[a-z0-9-]+\.trycloudflare\.com", open("/tmp/cloudflared.log").read())
+        if m:
+            url = m.group(0)
+            if _healthy(url):
+                return proc, url
+    proc.kill()
+    print(open("/tmp/cloudflared.log").read()[-2000:], flush=True)
+    raise RuntimeError("cloudflare tunnel did not come up" + (f" ({url})" if url else ""))
+
+
+def _start_ngrok():
+    """Fallback: the fixed ngrok domain (free plan: 1 GB/month)."""
+    public = f"https://{NGROK_DOMAIN}"  # noqa: F821
+    proc = None
+    for attempt in range(12):
+        if attempt:
+            print(f"ngrok domain still in use by another session - retrying ({attempt}/11) ...",
+                  flush=True)
+            time.sleep(15)
+        for flag in ("--url", "--domain"):
+            proc = subprocess.Popen(
+                [ngrok_path, "http", "7860", f"{flag}={NGROK_DOMAIN}",  # noqa: F821
+                 "--authtoken", NGROK_AUTHTOKEN, "--log", "stdout"],  # noqa: F821
+                stdout=open("/tmp/ngrok.log", "w"), stderr=subprocess.STDOUT)
+            for _ in range(25):
+                time.sleep(1)
+                if proc.poll() is not None or _healthy(public):
+                    break
+            else:
+                proc.kill()
+                proc.wait()
+                continue
+            if proc.poll() is None:
+                return proc, public
+        if "ERR_NGROK_334" not in open("/tmp/ngrok.log").read():
+            break
+    print(open("/tmp/ngrok.log").read()[-3000:], flush=True)
     raise RuntimeError("ngrok tunnel failed - see log above")
 
+
+# Don't start a duplicate if another session is already serving.
+_existing = _published_url()
+if _existing and _healthy(_existing):
+    server.terminate()  # noqa: F821
+    raise SystemExit(f"Another session is ALREADY serving HindiDub at {_existing} - use the app "
+                     "now. This duplicate run stops here to save your GPU hours.")
+
+try:
+    ngrok_proc, PUBLIC_URL = _start_cloudflare()  # name kept: the keep-alive cell stops it
+    TUNNEL = "cloudflare"
+except Exception as exc:
+    print("Cloudflare tunnel failed, trying ngrok:", exc, flush=True)
+    ngrok_proc, PUBLIC_URL = _start_ngrok()
+    TUNNEL = "ngrok"
+publish_url(PUBLIC_URL)
+print(f"🌐 Tunnel: {TUNNEL} - the app finds this address automatically.", flush=True)
 print("✅ HindiDub server is LIVE at", PUBLIC_URL)
 
 # Apply future GitHub fixes to this running server automatically.

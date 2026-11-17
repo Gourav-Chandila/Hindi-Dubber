@@ -67,10 +67,33 @@ def _restart(handle):
         handle.restarting = False
 
 
+def _keep_tunnel():
+    """Restart the public tunnel if it died, and re-announce the address so
+    the app can always find it (ntfy keeps messages ~12 h)."""
+    global ngrok_proc, PUBLIC_URL
+    if "PUBLIC_URL" not in globals():
+        return
+    if ngrok_proc.poll() is not None:  # noqa: F821
+        print("Tunnel stopped - restarting it ...", flush=True)
+        try:
+            ngrok_proc, PUBLIC_URL = _start_cloudflare()  # noqa: F821
+        except Exception:
+            ngrok_proc, PUBLIC_URL = _start_ngrok()  # noqa: F821
+        print("✅ HindiDub server is LIVE at", PUBLIC_URL, flush=True)
+    publish_url(PUBLIC_URL)  # noqa: F821
+
+
 def _watch(handle):
     branch = _git("rev-parse", "--abbrev-ref", "HEAD")
+    rounds = 0
     while True:
         time.sleep(CHECK_EVERY_SECONDS)
+        rounds += 1
+        try:
+            if rounds % 12 == 0 or ngrok_proc.poll() is not None:  # noqa: F821 (hourly)
+                _keep_tunnel()
+        except Exception as exc:
+            print("tunnel check failed:", exc, flush=True)
         try:
             _git("fetch", "-q", "--depth", "1", "origin", branch)
             new, cur = _git("rev-parse", "FETCH_HEAD"), _git("rev-parse", "HEAD")

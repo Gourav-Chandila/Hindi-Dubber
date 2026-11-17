@@ -12,7 +12,8 @@ import java.util.concurrent.TimeUnit
 
 class ApiException(val code: Int, message: String) : IOException(message)
 
-const val OFFLINE = "Server is offline. In Kaggle run Save Version → Save & Run All, then wait ~5 min."
+const val OFFLINE = "Server is offline. In Kaggle run Save Version → Save & Run All, then wait ~5 min " +
+    "(the app finds the new address by itself)."
 
 data class JobStatus(
     val id: String,

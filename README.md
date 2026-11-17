@@ -44,7 +44,7 @@ temperature.
 
 ## One-time setup (≈15 minutes)
 
-The server runs **free on a Kaggle GPU** and is reached through a **free fixed ngrok URL**.
+The server runs **free on a Kaggle GPU** and is reached through a **free Cloudflare quick tunnel** (no account, no monthly data cap). Its address changes every run, so the server announces it on a private ntfy.sh topic derived from your `HINDIDUB_API_KEY`, and the app finds it automatically. ngrok (below) is only a fallback; its free plan allows 1 GB per month.
 
 ### 1. ngrok (free fixed URL)
 1. Sign up at <https://dashboard.ngrok.com/signup>.

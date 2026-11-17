@@ -31,6 +31,7 @@ import com.hindidub.app.R
 import com.hindidub.app.data.Api
 import com.hindidub.app.data.ApiException
 import com.hindidub.app.data.Prefs
+import com.hindidub.app.data.ServerFinder
 import com.hindidub.app.media.AudioPrep
 import com.hindidub.app.media.HindiMuxer
 import java.io.File
@@ -58,11 +59,10 @@ class DubWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, p
         val uri = Uri.parse(inputData.getString(KEY_URI) ?: return@withContext Result.failure())
         val name = inputData.getString(KEY_NAME) ?: "video.mp4"
         val size = inputData.getLong(KEY_SIZE, -1L)
-        val api = Api(prefs.serverUrl, prefs.apiKey)
 
         try {
-            report(STAGE_CONNECT, 0f, "Waking up the server…")
-            api.health()
+            report(STAGE_CONNECT, 0f, "Finding the server…")
+            val api = connect()
 
             var jobId = prefs.jobId(workKey)
             // Send only the English audio when the phone can rebuild the video itself
@@ -134,6 +134,20 @@ class DubWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, p
             setProgressAsyncSafe(STAGE_RETRY, 0f, msg)
             Result.retry()
         } else fail("Could not reach the server: ${e.message}")
+
+    /** Saved address first; if it doesn't answer, look up the newest one the server announced. */
+    private fun connect(): Api {
+        val api = Api(prefs.serverUrl, prefs.apiKey)
+        try {
+            api.health()
+            return api
+        } catch (e: IOException) {
+            val found = ServerFinder.latestUrl(ServerFinder.keyFor(prefs)) ?: throw e
+            if (found == prefs.serverUrl) throw e
+            prefs.serverUrl = found
+            return Api(found, prefs.apiKey).also { it.health() }
+        }
+    }
 
     private val workDir get() = File(applicationContext.cacheDir, "dub_$workKey")
     private val englishFile get() = File(workDir, "english.m4a")

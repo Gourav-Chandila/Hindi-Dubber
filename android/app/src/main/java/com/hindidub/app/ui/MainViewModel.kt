@@ -10,6 +10,7 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.hindidub.app.data.Api
 import com.hindidub.app.data.Prefs
+import com.hindidub.app.data.ServerFinder
 import com.hindidub.app.work.DubWorker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -121,7 +122,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun testServer() {
         _check.value = ServerCheck(checking = true, message = "Connecting… (a sleeping free server can take a minute)")
         viewModelScope.launch(Dispatchers.IO) {
-            val result = runCatching { Api(prefs.serverUrl, prefs.apiKey).health() }
+            val result = runCatching {
+                try {
+                    Api(prefs.serverUrl, prefs.apiKey).health()
+                } catch (e: java.io.IOException) {
+                    // The server's address changes every Kaggle run: look up the newest one.
+                    val found = ServerFinder.latestUrl(ServerFinder.keyFor(prefs)) ?: throw e
+                    Api(found, prefs.apiKey).health().also {
+                        prefs.serverUrl = found
+                        _server.value = found
+                    }
+                }
+            }
             _check.update {
                 result.fold(
                     { ServerCheck(ok = true, message = "Connected ✓ (${it.optString("device", "cpu")})") },
