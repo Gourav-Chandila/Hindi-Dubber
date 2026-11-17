@@ -39,5 +39,15 @@ class Prefs(context: Context) {
     fun setUploadId(work: String, id: String?) = sp.edit { putString("upload_$work", id) }
     fun jobId(work: String): String? = sp.getString("job_$work", null)
     fun setJobId(work: String, id: String?) = sp.edit { putString("job_$work", id) }
-    fun clearWork(work: String) = sp.edit { remove("upload_$work"); remove("job_$work") }
+    /** "audio" = only the audio is sent (small), "video" = whole video (fallback). */
+    fun prepMode(work: String): String? = sp.getString("prep_mode_$work", null)
+    fun prepStartUs(work: String): Long = sp.getLong("prep_start_$work", 0L)
+    fun prepLang(work: String): String? = sp.getString("prep_lang_$work", null)
+    fun setPrep(work: String, mode: String, startUs: Long, lang: String?) = sp.edit {
+        putString("prep_mode_$work", mode); putLong("prep_start_$work", startUs); putString("prep_lang_$work", lang)
+    }
+    fun clearWork(work: String) = sp.edit {
+        remove("upload_$work"); remove("job_$work")
+        remove("prep_mode_$work"); remove("prep_start_$work"); remove("prep_lang_$work")
+    }
 }

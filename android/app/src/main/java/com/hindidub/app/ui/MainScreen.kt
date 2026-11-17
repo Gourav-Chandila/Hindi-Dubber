@@ -323,6 +323,8 @@ private fun ErrorCard(message: String, onRetry: () -> Unit) {
 
 private fun stepTitle(stage: String) = when (stage) {
     "connect" -> "Step 1 of 4 · Connecting"
+    "prepare" -> "Step 1 of 4 · Preparing audio"
+    "finish" -> "Step 4 of 4 · Finishing"
     "upload" -> "Step 2 of 4 · Uploading"
     "server" -> "Step 3 of 4 · Dubbing"
     "download" -> "Step 4 of 4 · Downloading"
