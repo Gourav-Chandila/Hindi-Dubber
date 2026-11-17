@@ -44,3 +44,23 @@ def test_dubbing_continues_when_music_separation_fails(tmp_path):
     vocals, bg, separated, note = runner.separate_or_fallback(
         orig, tmp_path, Settings(), "cpu", lambda f: None, separator=broken_separator)
     assert (vocals, bg, separated) == (orig, orig, False) and note.startswith("skipped")
+
+
+def test_voice_speaks_faster_itself_instead_of_robotic_stretch(monkeypatch):
+    stretch_rates = []
+    monkeypatch.setattr(runner.timing, "time_stretch",
+                        lambda x, sr, rate: stretch_rates.append(rate) or x)
+
+    class NativeTTS(FakeTTS):
+        native_speed = True
+
+        def synth(self, speaker, text, style=None, rate=1.0):
+            return np.ones(int(len(text) * 0.1 / rate * self.sample_rate), np.float32) * 0.1
+
+    def translator(texts, shorter=False):
+        return ["यह भी लंबा वाक्य है"]  # not shorter -> still needs speed-up
+
+    seg = {"speaker": 0, "text": "A long English line", "hi": "यह एक लंबा वाक्य है"}  # 1.9 s
+    runner._render_line(NativeTTS(), seg, slot=1.7, cfg=Settings(), translator=translator)
+    assert seg.get("sped_natively") and not seg.get("stretched")
+    assert all(abs(r - 1.0) < 1e-3 for r in stretch_rates)  # no audible stretching left

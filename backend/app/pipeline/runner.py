@@ -320,6 +320,8 @@ def _synthesize(segments, refs, work: Path, cfg: Settings, device: str, translat
     stats["lines_shortened"] = shortened
     stats["lines_trimmed"] = trimmed
     stats["lines_failed"] = failed
+    stats["lines_sped_natively"] = sum(1 for s in segments if s.get("sped_natively"))
+    stats["lines_time_stretched"] = sum(1 for s in segments if s.get("stretched"))
     del tts
     return track
 
@@ -334,14 +336,24 @@ def _render_line(tts, s: dict, slot: float, cfg: Settings, translator) -> np.nda
     plan = timing.plan_fit(len(wav) / MIX_SR, slot, cfg.max_stretch)
     # Prefer a shorter sentence over audible speed-up: try it as soon as the
     # line would need more than a small speed-up, not only when it can't fit.
+    spoken = text
     if plan.needs_shorter or plan.rate > cfg.shorten_above:
         short = translator([s["text"]], shorter=True)[0]
         if short and short != text:
             wav2 = audio.resample(tts.synth(s["speaker"], speakable(short), style=style),
                                   tts.sample_rate, MIX_SR)
             if len(wav2) < len(wav):
-                wav, s["hi"], s["shortened"] = wav2, short, True
+                wav, s["hi"], s["shortened"], spoken = wav2, short, True, short
                 plan = timing.plan_fit(len(wav) / MIX_SR, slot, cfg.max_stretch)
+    if plan.rate > 1.0 + 1e-3 and getattr(tts, "native_speed", False):
+        # Let the voice itself speak faster: far more natural than stretching the
+        # audio afterwards, which sounds metallic/robotic (worst on higher voices).
+        wav = audio.resample(tts.synth(s["speaker"], speakable(spoken), style=style, rate=plan.rate),
+                             tts.sample_rate, MIX_SR)
+        s["sped_natively"] = True
+        plan = timing.plan_fit(len(wav) / MIX_SR, slot, cfg.max_stretch)
+    if plan.rate > 1.0 + 1e-3:
+        s["stretched"] = True
     wav = timing.time_stretch(wav, MIX_SR, plan.rate)
     fitted = timing.fit_to_slot(wav, MIX_SR, slot)
     if len(fitted) < len(wav):

@@ -45,8 +45,11 @@ class HindiTTS:
         self.speakers[speaker_id] = Speaker(lat, emb)
 
     name = "xtts"
+    native_speed = True
 
-    def synth(self, speaker_id: int, text: str, speed: float = 1.0, style: dict | None = None) -> np.ndarray:
+    def synth(self, speaker_id: int, text: str, speed: float = 1.0, style: dict | None = None,
+              rate: float = 1.0) -> np.ndarray:
+        speed = speed * rate
         spk = self.speakers[speaker_id]
         out = self.model.inference(
             text, "hi", spk.gpt_cond_latent, spk.speaker_embedding,

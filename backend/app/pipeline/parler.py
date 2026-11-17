@@ -51,7 +51,10 @@ class ParlerHindiTTS:
     def set_voices(self, voices: dict[int, dict]) -> None:
         self.voices = voices
 
-    def synth(self, speaker_id: int, text: str, style: dict | None = None) -> np.ndarray:
+    native_speed = False  # pace comes from the description; exact fit uses time-stretch
+
+    def synth(self, speaker_id: int, text: str, style: dict | None = None,
+              rate: float = 1.0) -> np.ndarray:
         v = self.voices.get(speaker_id) or {"name": "Rohit", "pitch": PITCHES[0], "seed": 1000}
         desc = describe(v["name"], v["pitch"], style)
         d = self.desc_tok(desc, return_tensors="pt").to(self.device)

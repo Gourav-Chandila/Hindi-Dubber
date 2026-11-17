@@ -107,7 +107,8 @@ class JobStore:
     def save_last_job(self, stats: dict) -> None:
         """Which engines the last finished dub really used (shown on /health)."""
         keep = ("tts_engine", "translation_engine", "music_separation", "speakers", "voice_mode",
-                "audio_only", "duration_s", "lines_shortened", "lines_trimmed", "lines_failed")
+                "audio_only", "duration_s", "lines_shortened", "lines_trimmed", "lines_failed",
+                "lines_sped_natively", "lines_time_stretched")
         summary = {k: stats[k] for k in keep if k in stats}
         voices = stats.get("voices")
         if isinstance(voices, dict):

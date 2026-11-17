@@ -34,6 +34,7 @@ def line_speed(base: float, style: dict | None) -> float:
 class KokoroHindiTTS:
     name = "kokoro"
     sample_rate = 24000
+    native_speed = True  # can speak faster itself -> no robotic time-stretching
 
     def __init__(self, device: str, repo_id: str = "hexgrad/Kokoro-82M"):
         from kokoro import KPipeline
@@ -44,10 +45,11 @@ class KokoroHindiTTS:
     def set_voices(self, voices: dict[int, dict]) -> None:
         self.voices = voices
 
-    def synth(self, speaker_id: int, text: str, style: dict | None = None) -> np.ndarray:
+    def synth(self, speaker_id: int, text: str, style: dict | None = None,
+              rate: float = 1.0) -> np.ndarray:
         v = self.voices.get(speaker_id) or {"voice": MALE[0], "speed": 1.0}
         parts = []
-        for r in self.pipe(text, voice=v["voice"], speed=line_speed(v["speed"], style)):
+        for r in self.pipe(text, voice=v["voice"], speed=line_speed(v["speed"], style) * rate):
             if r.audio is not None:
                 parts.append(r.audio.detach().cpu().float().numpy())
         return np.concatenate(parts).astype(np.float32) if parts else np.zeros(0, np.float32)
